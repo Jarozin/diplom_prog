@@ -3,23 +3,23 @@
   "objects": [
     {
       "name": "чайник",
-      "properties": {}
+      "type": "object"
     },
     {
       "name": "кружка",
-      "properties": {}
-    },
-    {
-      "name": "банка_кофе",
-      "properties": {}
+      "type": "object"
     },
     {
       "name": "источник_воды",
-      "properties": {}
+      "type": "subject"
+    },
+    {
+      "name": "банка_кофе",
+      "type": "subject"
     },
     {
       "name": "ложка",
-      "properties": {}
+      "type": "subject"
     }
   ],
   "states": [
@@ -108,8 +108,6 @@
       "name": "НалитьВодуВЧайник",
       "description": "Налить воду из источника в чайник",
       "required_objects": ["чайник", "источник_воды"],
-      "produced_objects": [],
-      "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
@@ -144,8 +142,6 @@
       "name": "ВскипятитьВоду",
       "description": "Вскипятить воду в чайнике",
       "required_objects": ["чайник"],
-      "produced_objects": [],
-      "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
@@ -180,8 +176,6 @@
       "name": "НалитьКипятокВКружку",
       "description": "Перелить кипяток из чайника в кружку",
       "required_objects": ["чайник", "кружка"],
-      "produced_objects": [],
-      "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
@@ -229,8 +223,6 @@
       "name": "ДобавитьКофе",
       "description": "Добавить кофе из банки в кружку",
       "required_objects": ["кружка", "банка_кофе"],
-      "produced_objects": [],
-      "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
@@ -272,8 +264,6 @@
       "name": "ПеремешатьКофе",
       "description": "Перемешать кофе в кружке ложкой",
       "required_objects": ["кружка", "ложка"],
-      "produced_objects": [],
-      "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
