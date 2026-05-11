@@ -116,7 +116,6 @@ class InstructionGraph:
         
         graph = cls(data.get('name', 'InstructionGraph'))
         
-        # Загружаем объекты (без состояния, только имена)
         for obj_data in data.get('objects', []):
             obj = Object(
                 name=obj_data['name'],
@@ -124,7 +123,6 @@ class InstructionGraph:
             )
             graph.add_object(obj)
         
-        # Загружаем состояния с objects_state
         for state_data in data.get('states', []):
             state = State(
                 id=state_data['id'],
@@ -135,7 +133,6 @@ class InstructionGraph:
             )
             graph.add_state(state)
         
-        # Загружаем действия
         for action_data in data.get('actions', []):
             action = Action(
                 id=action_data['id'],
@@ -153,7 +150,6 @@ class InstructionGraph:
             action._postcondition_funcs = cls._compile_conditions(action.postconditions, graph)
             graph.add_action(action)
         
-        # Загружаем переходы
         for trans_data in data.get('transitions', []):
             graph.add_transition(
                 trans_data['from'],
@@ -178,7 +174,6 @@ class InstructionGraph:
                 
                 def make_check(obj_name, prop_name, operator, value):
                     def check(context):
-                        # Получаем состояние объектов из текущего состояния графа
                         current_state_id = context['current_state']
                         current_state = graph.states.get(current_state_id)
                         if not current_state:
@@ -214,7 +209,6 @@ class InstructionGraph:
                 
                 def make_setter(obj_name, prop_name, value):
                     def setter(context):
-                        # Изменяем objects_state в следующем состоянии
                         if 'next_state_id' in context:
                             next_state = graph.states.get(context['next_state_id'])
                             if next_state:
@@ -257,7 +251,6 @@ class InstructionGraph:
                 def make_printer(message_template):
                     def printer(context):
                         message = message_template
-                        # Подстановка переменных из objects_state текущего состояния
                         current_state_id = context['current_state']
                         current_state = graph.states.get(current_state_id)
                         if current_state:
@@ -367,15 +360,33 @@ class InstructionGraph:
         return context
     
     def _update_context(self, context: Dict[str, Any], next_state_id: str) -> None:
-        # Обновляем объекты (только имена, состояние хранится в state)
         if 'objects' in context:
             self.objects.update(context['objects'])
     
     def get_current_objects_state(self) -> Dict[str, Dict[str, Any]]:
-        """Получить состояние объектов в текущем состоянии графа"""
         if self.current_state_id and self.current_state_id in self.states:
             return self.states[self.current_state_id].objects_state
         return {}
+    
+    def format_objects_state(self, objects_state: Dict[str, Dict[str, Any]]) -> str:
+        if not objects_state:
+            return ""
+        
+        lines = []
+        for obj_name, obj_props in objects_state.items():
+            true_props = []
+            for prop_name, prop_value in obj_props.items():
+                if prop_value is True:
+                    true_props.append(prop_name)
+                elif prop_value is not False and prop_value is not None:
+                    true_props.append(f"{prop_name}={prop_value}")
+            
+            if true_props:
+                lines.append(f"      {obj_name}: {', '.join(true_props)}")
+            else:
+                lines.append(f"      {obj_name}: (нет активных свойств)")
+        
+        return "\n".join(lines)
     
     def step_by_step_mode(self):
         print("\n" + "="*70)
@@ -396,12 +407,10 @@ class InstructionGraph:
             print(f"   Описание: {current_state.description}")
             print(f"   Тип: {current_state.state_type.to_rus()}")
             
-            # Показываем состояние объектов
             if current_state.objects_state:
                 print("\n   Состояние объектов:")
-                for obj_name, obj_props in current_state.objects_state.items():
-                    props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
-                    print(f"      {obj_name}: {props_str}")
+                formatted = self.format_objects_state(current_state.objects_state)
+                print(formatted)
             
             if current_state.state_type in [StateType.FINAL, StateType.ERROR]:
                 print(f"\n{'[ДОСТИГНУТО КОНЕЧНОЕ СОСТОЯНИЕ]' if current_state.state_type == StateType.FINAL else '[ДОСТИГНУТО СОСТОЯНИЕ ОШИБКИ]'}")
@@ -492,17 +501,15 @@ class InstructionGraph:
         print(f"   Всего состояний: {len(self.states)}")
         print(f"   Всего объектов: {len(self.objects)}")
         
-        # Показываем состояние объектов из текущего состояния
         objects_state = self.get_current_objects_state()
         if objects_state:
             print(f"\n[СОСТОЯНИЕ ОБЪЕКТОВ В ТЕКУЩЕМ СОСТОЯНИИ]")
-            for obj_name, obj_props in objects_state.items():
-                props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
-                print(f"   {obj_name}: {props_str}")
+            formatted = self.format_objects_state(objects_state)
+            print(formatted)
     
     def visualize(self, filename: str = "instruction_graph") -> None:
         try:
-            G = nx.MultiDiGraph()
+            G = nx.DiGraph()
             
             # Цвета для разных типов узлов
             state_color = '#AED6F1'      # светлый синий
@@ -520,13 +527,22 @@ class InstructionGraph:
                 else:
                     color = state_color
                 
-                # Формируем подпись с состоянием объектов
+                # Формируем подпись с состоянием объектов (только True значения)
                 obj_lines = []
                 for obj_name, obj_props in state.objects_state.items():
-                    props = ", ".join(f"{k}={v}" for k, v in obj_props.items())
-                    obj_lines.append(f"{obj_name}: {props}")
-                obj_text = "\n".join(obj_lines[:3])  # не более 3 строк
-                label = f"{state.name}\n{state.description[:20]}\n{obj_text}" if obj_text else f"{state.name}\n{state.description[:20]}"
+                    true_props = []
+                    for prop_name, prop_value in obj_props.items():
+                        if prop_value is True:
+                            true_props.append(prop_name)
+                        elif prop_value is not False and prop_value is not None:
+                            true_props.append(f"{prop_name}={prop_value}")
+                    if true_props:
+                        obj_lines.append(f"{obj_name}: {', '.join(true_props)}")
+                
+                obj_text = "\n".join(obj_lines[:3])
+                if obj_text and len(obj_text) > 50:
+                    obj_text = obj_text[:47] + "..."
+                label = f"{state.name}\n{state.description[:20]}" + (f"\n{obj_text}" if obj_text else "")
                 
                 G.add_node(f"state_{state_id}", 
                           label=label,
@@ -547,14 +563,15 @@ class InstructionGraph:
                           type='object',
                           color=object_color)
             
-            # Добавляем ребра: состояние -> действие -> состояние
+            # Добавляем ребра: состояние -> действие (стрелка)
+            # и действие -> состояние (стрелка)
             for (from_state, action_id), to_state in self.transitions.items():
                 action = self.actions.get(action_id)
                 if action:
                     G.add_edge(f"state_{from_state}", f"action_{action_id}")
                     G.add_edge(f"action_{action_id}", f"state_{to_state}")
             
-            # Добавляем связи объектов с действиями (required)
+            # Добавляем связи объектов с действиями (required) - пунктирные стрелки
             for action_id, action in self.actions.items():
                 for obj_name in action.required_objects:
                     G.add_edge(f"object_{obj_name}", f"action_{action_id}", style='dashed')
@@ -589,23 +606,41 @@ class InstructionGraph:
                                          node_color=color, node_size=2500,
                                          alpha=0.9)
             
-            # Рисуем ребра
-            nx.draw_networkx_edges(G, pos, edge_color='gray',
-                                 arrows=True, arrowsize=15, arrowstyle='->',
-                                 connectionstyle='arc3,rad=0.1', alpha=0.6)
+            # Рисуем ребра с направлением (стрелки)
+            # Разделяем обычные и пунктирные ребра
+            solid_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('style') != 'dashed']
+            dashed_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('style') == 'dashed']
+            
+            if solid_edges:
+                nx.draw_networkx_edges(G, pos, edgelist=solid_edges,
+                                     edge_color='gray', arrows=True, 
+                                     arrowsize=15, arrowstyle='->',
+                                     connectionstyle='arc3,rad=0.1', alpha=0.6)
+            
+            if dashed_edges:
+                nx.draw_networkx_edges(G, pos, edgelist=dashed_edges,
+                                     edge_color='gray', arrows=True,
+                                     arrowsize=12, arrowstyle='->',
+                                     style='dashed', alpha=0.5)
             
             # Рисуем подписи
             labels = nx.get_node_attributes(G, 'label')
             nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight='bold')
             
-            # Легенда
+            # Легенда - только информация о типах узлов и стрелках
             from matplotlib.patches import Patch
+            from matplotlib.lines import Line2D
+            
             legend_elements = [
-                Patch(facecolor=state_color, alpha=0.8, label='Состояния'),
-                Patch(facecolor=action_color, alpha=0.8, label='Действия'),
-                Patch(facecolor=object_color, alpha=0.8, label='Объекты'),
-                Patch(facecolor=initial_color, alpha=0.8, label='Начальное состояние'),
-                Patch(facecolor=final_color, alpha=0.8, label='Конечное состояние')
+                Patch(facecolor=state_color, alpha=0.8, edgecolor='black', label='Состояния'),
+                Patch(facecolor=action_color, alpha=0.8, edgecolor='black', label='Действия'),
+                Patch(facecolor=object_color, alpha=0.8, edgecolor='black', label='Объекты'),
+                Patch(facecolor=initial_color, alpha=0.8, edgecolor='black', label='Начальное состояние'),
+                Patch(facecolor=final_color, alpha=0.8, edgecolor='black', label='Конечное состояние'),
+                Line2D([0], [0], color='gray', marker='>', markersize=10, 
+                       linestyle='-', linewidth=1, label='Переход (стрелка направления)'),
+                Line2D([0], [0], color='gray', linestyle='--', linewidth=1,
+                       label='Использование объекта (пунктир)')
             ]
             plt.legend(handles=legend_elements, loc='upper right', fontsize=10)
             
@@ -635,11 +670,18 @@ class InstructionGraph:
             current_marker = " <- ТЕКУЩЕЕ" if state_id == self.current_state_id else ""
             print(f"   {type_marker} {state.name} [{state_id}]: {state.description}{current_marker}")
             
-            # Показываем состояние объектов
             if state.objects_state:
                 for obj_name, obj_props in state.objects_state.items():
-                    props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
-                    print(f"        - {obj_name}: {props_str}")
+                    true_props = []
+                    for prop_name, prop_value in obj_props.items():
+                        if prop_value is True:
+                            true_props.append(prop_name)
+                        elif prop_value is not False and prop_value is not None:
+                            true_props.append(f"{prop_name}={prop_value}")
+                    if true_props:
+                        print(f"        - {obj_name}: {', '.join(true_props)}")
+                    else:
+                        print(f"        - {obj_name}: (нет активных свойств)")
         
         print("\n[ДЕЙСТВИЯ]")
         for action_id, action in self.actions.items():
@@ -739,7 +781,6 @@ def main():
     result_file = json_file.replace('.json', '_result.json')
     print(f"\nСохранение результатов в {result_file}...")
     
-    # Сохраняем финальное состояние объектов
     final_objects_state = graph.get_current_objects_state()
     
     with open(result_file, 'w', encoding='utf-8') as f:
