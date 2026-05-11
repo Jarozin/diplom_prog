@@ -311,13 +311,29 @@ class AHPRecommendationRanker:
         
         Returns:
             список кортежей (рекомендация, оценка), отсортированный по убыванию
+            Оценки нормализованы так, что их сумма = 1
         """
-        ranked = []
+        # 1. Вычисляем сырые оценки
+        raw_scores = []
         for rec in recommendations:
             score = self.calculate_recommendation_score(rec.get('scores', {}))
-            ranked.append((rec, score))
+            raw_scores.append(score)
         
+        # 2. Нормализуем, чтобы сумма = 1
+        total = sum(raw_scores)
+        if total > 0:
+            normalized_scores = [score / total for score in raw_scores]
+        else:
+            normalized_scores = [1.0 / len(raw_scores) for _ in raw_scores]  # равномерное распределение
+        
+        # 3. Формируем результат
+        ranked = []
+        for rec, norm_score in zip(recommendations, normalized_scores):
+            ranked.append((rec, norm_score))
+        
+        # 4. Сортируем по убыванию
         ranked.sort(key=lambda x: x[1], reverse=True)
+        
         return ranked
     
     def get_top_recommendations(self, recommendations: List[Dict], top_n: int = 3) -> List[Dict]:
