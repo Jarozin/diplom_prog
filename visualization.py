@@ -48,14 +48,16 @@ def visualize_graph(graph, filename: str = "instruction_graph") -> None:
             G.add_node(f"state_{state_id}", 
                       label=label,
                       type='state',
-                      color=color)
+                      color=color,
+                      state_id=state_id)
         
         # Добавляем узлы действий
         for action_id, action in graph.actions.items():
             G.add_node(f"action_{action_id}",
                       label=f"{action.name[:30]}",
                       type='action',
-                      color=action_color)
+                      color=action_color,
+                      action_id=action_id)
         
         # Добавляем узлы объектов и субъектов
         for obj_name, obj in graph.objects.items():
@@ -71,54 +73,76 @@ def visualize_graph(graph, filename: str = "instruction_graph") -> None:
             G.add_node(f"obj_{obj_name}",
                       label=label,
                       type=node_type,
-                      color=color)
+                      color=color,
+                      obj_name=obj_name)
         
-        # Добавляем ребра: состояние -> действие и действие -> состояние
+        # Добавляем ребра: действие -> состояние и состояние -> действие
         for (from_state, action_id), to_state in graph.transitions.items():
             action = graph.actions.get(action_id)
             if action:
-                G.add_edge(f"state_{from_state}", f"action_{action_id}", edge_type='transition')
-                G.add_edge(f"action_{action_id}", f"state_{to_state}", edge_type='transition')
+                # Действие -> Состояние (результат действия)
+                G.add_edge(f"action_{action_id}", f"state_{to_state}", edge_type='transition_result')
+                # Состояние -> Действие (доступное действие из состояния)
+                G.add_edge(f"state_{from_state}", f"action_{action_id}", edge_type='transition_available')
         
-        # Добавляем связи для объектов и субъектов
-        subjects = {name for name, obj in graph.objects.items() if obj.obj_type == "subject"}
-        objects = {name for name, obj in graph.objects.items() if obj.obj_type == "object"}
+        # Связываем объекты только с теми состояниями, для которых они участвуют в доступных действиях
+        # Для каждого состояния находим доступные действия и требуемые объекты
+        for state_id, state in graph.states.items():
+            # Находим все действия, доступные из этого состояния
+            available_actions = []
+            for (from_state, action_id), to_state in graph.transitions.items():
+                if from_state == state_id:
+                    action = graph.actions.get(action_id)
+                    if action:
+                        available_actions.append(action)
+            
+            # Собираем все объекты, требуемые для доступных действий
+            required_objects_for_state = set()
+            for action in available_actions:
+                required_objects_for_state.update(action.required_objects)
+            
+            # Для каждого требуемого объекта создаем связь
+            for obj_name in required_objects_for_state:
+                obj_node = f"obj_{obj_name}"
+                state_node = f"state_{state_id}"
+                
+                if obj_node in G.nodes and state_node in G.nodes:
+                    obj = graph.objects.get(obj_name)
+                    if obj and obj.obj_type == "subject":
+                        # Субъект -> Состояние (субъект нужен для действия из состояния)
+                        G.add_edge(obj_node, state_node, edge_type='subject_required', style='dashed')
+                    else:
+                        # Состояние -> Объект (объект нужен для действия из состояния)
+                        G.add_edge(state_node, obj_node, edge_type='object_required', style='dashed')
         
-        for action_id, action in graph.actions.items():
-            for obj_name in action.required_objects:
-                if obj_name in subjects:
-                    # Субъект -> Действие
-                    G.add_edge(f"obj_{obj_name}", f"action_{action_id}", 
-                              edge_type='subject', style='dashed')
-                else:
-                    # Действие -> Объект
-                    G.add_edge(f"action_{action_id}", f"obj_{obj_name}", 
-                              edge_type='object', style='dashed')
-        
-        # Позиционирование узлов
+        # Позиционирование узлов: действия слева, состояния в центре, объекты справа
         pos = {}
-        state_count = 0
         action_count = 0
+        state_count = 0
         object_count = 0
         subject_count = 0
         
         for node, data in G.nodes(data=True):
             node_type = data.get('type', 'state')
-            if node_type == 'state':
-                pos[node] = (-3, state_count * 1.5 - 3)
-                state_count += 1
-            elif node_type == 'action':
-                pos[node] = (0, action_count * 1.5 - 3)
+            if node_type == 'action':
+                # Действия слева (x = -3)
+                pos[node] = (-3, action_count * 1.5 - 3)
                 action_count += 1
+            elif node_type == 'state':
+                # Состояния в центре (x = 0)
+                pos[node] = (0, state_count * 1.5 - 3)
+                state_count += 1
             elif node_type == 'object':
+                # Объекты справа (x = 3)
                 pos[node] = (3, object_count * 1.5 - 3)
                 object_count += 1
             elif node_type == 'subject':
+                # Субъекты еще правее (x = 5)
                 pos[node] = (5, subject_count * 1.5 - 3)
                 subject_count += 1
         
-        # Создаем фигуру
-        fig, ax = plt.subplots(figsize=(20, 14))
+        # Создаем фигуру с большим отступом справа для легенды
+        fig, ax = plt.subplots(figsize=(22, 14))
         
         # Рисуем узлы по типам
         for node_type, color in [('state', state_color), ('action', action_color), 
@@ -178,74 +202,76 @@ def visualize_graph(graph, filename: str = "instruction_graph") -> None:
         # Рисуем ребра
         for u, v, d in G.edges(data=True):
             edge_type = d.get('edge_type', '')
-            if edge_type == 'transition':
+            if edge_type == 'transition_result':
+                # Действие -> Состояние (зеленый, сплошной)
+                draw_arrow_with_offset(ax, u, v, color='green', 
+                                      linewidth=1.5, linestyle='-', offset=0.2)
+            elif edge_type == 'transition_available':
+                # Состояние -> Действие (серый, сплошной)
                 draw_arrow_with_offset(ax, u, v, color='gray', 
                                       linewidth=1.5, linestyle='-', offset=0.2)
-            elif edge_type == 'subject':
+            elif edge_type == 'subject_required':
+                # Субъект -> Состояние (синий, пунктирный)
                 draw_arrow_with_offset(ax, u, v, color='blue', 
                                       linewidth=1.5, linestyle='--', offset=0.2)
-            elif edge_type == 'object':
-                draw_arrow_with_offset(ax, u, v, color='green', 
+            elif edge_type == 'object_required':
+                # Состояние -> Объект (оранжевый, пунктирный)
+                draw_arrow_with_offset(ax, u, v, color='orange', 
                                       linewidth=1.5, linestyle='--', offset=0.2)
         
-        # Подписи узлов
+        # Подписи узлов - в центре
         labels = nx.get_node_attributes(G, 'label')
         for node, (x, y) in pos.items():
             label = labels.get(node, '')
-            node_type = G.nodes[node].get('type', 'state')
-            
-            # Сдвигаем подпись
-            offset_x, offset_y = 0, -0.15
-            if node_type == 'object':
-                offset_x, offset_y = 0.15, 0
-            elif node_type == 'subject':
-                offset_x, offset_y = 0.15, 0
-            elif node_type == 'action':
-                offset_x, offset_y = 0, -0.2
-            
-            ax.text(x + offset_x, y + offset_y, label, fontsize=8, 
+            ax.text(x, y, label, fontsize=8, 
                    fontweight='bold', ha='center', va='center', zorder=3,
                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
                             edgecolor='gray', alpha=0.9))
         
-        # Легенда
+        # Легенда - размещаем справа от графа
         legend_elements = [
             Patch(facecolor=state_color, alpha=0.8, edgecolor='black', 
                   label='Состояния (промежуточные)'),
             Patch(facecolor=action_color, alpha=0.8, edgecolor='black', 
                   label='Действия'),
             Patch(facecolor=object_color, alpha=0.8, edgecolor='black', 
-                  label='Объекты (направление: действие → объект)'),
+                  label='Объекты'),
             Patch(facecolor=subject_color, alpha=0.8, edgecolor='black', 
-                  label='Субъекты (направление: субъект → действие)'),
+                  label='Субъекты'),
             Patch(facecolor=initial_color, alpha=0.8, edgecolor='black', 
                   label='Начальное состояние'),
             Patch(facecolor=final_color, alpha=0.8, edgecolor='black', 
                   label='Конечное состояние'),
+            Line2D([0], [0], color='green', linewidth=1.5, 
+                   marker='>', markersize=10, markeredgewidth=1.5,
+                   label='Действие → Состояние (результат)'),
             Line2D([0], [0], color='gray', linewidth=1.5, 
                    marker='>', markersize=10, markeredgewidth=1.5,
-                   label='Переход (сплошная стрелка)'),
+                   label='Состояние → Действие (доступно)'),
             Line2D([0], [0], color='blue', linewidth=1.5, linestyle='--',
                    marker='>', markersize=10, markeredgewidth=1.5,
-                   label='Субъект → Действие (синий пунктир)'),
-            Line2D([0], [0], color='green', linewidth=1.5, linestyle='--',
+                   label='Субъект необходим → Состояние'),
+            Line2D([0], [0], color='orange', linewidth=1.5, linestyle='--',
                    marker='>', markersize=10, markeredgewidth=1.5,
-                   label='Действие → Объект (зеленый пунктир)')
+                   label='Состояние → Объект необходим')
         ]
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=9, 
-                 framealpha=0.9, bbox_to_anchor=(0, 1))
+        
+        # Размещаем легенду справа от графика
+        ax.legend(handles=legend_elements, loc='center left', fontsize=9, 
+                 framealpha=0.9, bbox_to_anchor=(1.02, 0.5))
         
         ax.set_title(f"Граф инструкций: {graph.name}\n"
-                    f"(Состояния, действия, объекты и субъекты как отдельные узлы)", 
-                    fontsize=14, fontweight='bold')
+                    f"(Действия слева, состояния в центре, объекты/субъекты справа)\n"
+                    f"Объекты связаны только с состояниями, где они участвуют в доступных действиях", 
+                    fontsize=12, fontweight='bold')
         ax.axis('off')
         ax.set_aspect('equal')
         
-        # Устанавливаем границы
+        # Устанавливаем границы с учетом легенды
         all_x = [pos[n][0] for n in pos]
         all_y = [pos[n][1] for n in pos]
         margin = 0.5
-        ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
+        ax.set_xlim(min(all_x) - margin, max(all_x) + 3.5)
         ax.set_ylim(min(all_y) - margin, max(all_y) + margin)
         
         plt.tight_layout()
