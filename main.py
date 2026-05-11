@@ -123,7 +123,8 @@ def step_by_step_mode(graph: InstructionGraph):
             if 1 <= idx <= len(available_actions):
                 action, next_state_id = available_actions[idx - 1]
                 
-                # Показываем топ-3 ранжированных рекомендаций (по МАИ)
+                # Получаем топ-3 рекомендации для сохранения в историю
+                recommendations_to_show = []
                 if graph.label_manager:
                     top_recs = graph.label_manager.get_top_recommendations_for_action(action, top_n=3)
                     if top_recs:
@@ -132,6 +133,7 @@ def step_by_step_mode(graph: InstructionGraph):
                         for rec in top_recs:
                             print(f"      {rec['rank']}. {rec['text']}")
                             print(f"         (оценка: {rec['score']:.3f})")
+                            recommendations_to_show.append(rec)
                         print("   " + "-"*55)
                 
                 print(f"\nВыполнить действие: {action.name}?")
@@ -139,7 +141,8 @@ def step_by_step_mode(graph: InstructionGraph):
                 
                 if confirm == 'y':
                     print(f"\nВыполняется: {action.name}...")
-                    success = graph.execute_action(action.id)
+                    # Передаем рекомендации в execute_action для сохранения в истории
+                    success = graph.execute_action(action.id, recommendations=recommendations_to_show)
                     if success:
                         steps += 1
                 else:
@@ -199,7 +202,7 @@ def main():
     print("\n" + "="*70)
     print("ВЫБЕРИТЕ РЕЖИМ РАБОТЫ:")
     print("="*70)
-    print("   1. Интерактивный пошаговый режим (с ранжированными рекомендациями по МАИ)")
+    print("   1. Интерактивный пошаговый режим (с ранжированными рекомендациями)")
     print("   2. Показать информацию о графе")
     print("   3. Визуализировать граф (состояния, действия, объекты)")
     print("   4. Показать все метки и рекомендации")
@@ -262,9 +265,22 @@ def main():
     
     final_objects_state = graph.get_current_objects_state()
     
+    # Сохраняем историю с рекомендациями
+    history_data = []
+    for step in graph.execution_history:
+        history_data.append({
+            'from_state': step.from_state,
+            'from_state_name': step.from_state_name,
+            'action_id': step.action_id,
+            'action_name': step.action_name,
+            'to_state': step.to_state,
+            'to_state_name': step.to_state_name,
+            'recommendations': step.recommendations
+        })
+    
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump({
-            'execution_history': graph.execution_history,
+            'execution_history': history_data,
             'final_state_id': graph.current_state_id,
             'final_state_name': graph.states[graph.current_state_id].name if graph.current_state_id else None,
             'final_objects_state': final_objects_state

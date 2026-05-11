@@ -4,7 +4,7 @@ from typing import Dict, List, Set, Optional, Any, Tuple
 from collections import defaultdict
 import json
 
-from models import Object, State, Action, StateType
+from models import Object, State, Action, StateType, HistoryStep
 from conditions import compile_conditions
 from labels import LabelManager
 
@@ -19,7 +19,7 @@ class InstructionGraph:
         self.objects: Dict[str, Object] = {}
         self.transitions: Dict[tuple, str] = {}
         self.current_state_id: Optional[str] = None
-        self.execution_history: List[tuple] = []
+        self.execution_history: List[HistoryStep] = []  # Теперь список HistoryStep
         self.label_manager = label_manager or LabelManager()
         
     @classmethod
@@ -125,8 +125,15 @@ class InstructionGraph:
         
         return available
     
-    def execute_action(self, action_id: str, silent: bool = False) -> bool:
-        """Выполнение действия"""
+    def execute_action(self, action_id: str, recommendations: Optional[List[Dict]] = None, silent: bool = False) -> bool:
+        """
+        Выполнение действия с сохранением рекомендаций в историю
+        
+        Args:
+            action_id: идентификатор действия
+            recommendations: список рекомендаций, показанных пользователю
+            silent: подавлять вывод
+        """
         if self.current_state_id is None:
             if not silent:
                 print("Нет текущего состояния")
@@ -152,14 +159,26 @@ class InstructionGraph:
             self._update_context(new_context, next_state_id)
             
             old_state = self.current_state_id
+            old_state_name = self.states[old_state].name
             self.current_state_id = next_state_id
+            new_state_name = self.states[self.current_state_id].name
             
-            self.execution_history.append((old_state, action_id, self.current_state_id))
+            # Сохраняем шаг истории с рекомендациями
+            history_step = HistoryStep(
+                from_state=old_state,
+                from_state_name=old_state_name,
+                action_id=action_id,
+                action_name=action.name,
+                to_state=self.current_state_id,
+                to_state_name=new_state_name,
+                recommendations=recommendations or []
+            )
+            self.execution_history.append(history_step)
             
             if not silent:
                 print(f"\n[ВЫПОЛНЕНО] {action.name}")
-                print(f"     Из: {self.states[old_state].name}")
-                print(f"     В: {self.states[self.current_state_id].name}")
+                print(f"     Из: {old_state_name}")
+                print(f"     В: {new_state_name}")
                 
                 if action.consumed_objects:
                     print(f"     Потреблено: {', '.join(action.consumed_objects)}")
@@ -167,8 +186,10 @@ class InstructionGraph:
                     print(f"     Создано: {', '.join(action.produced_objects)}")
                 
                 # Показываем рекомендации для выполненного действия
-                if self.label_manager:
-                    self.label_manager.display_recommendations_for_action(action)
+                if self.label_manager and recommendations:
+                    print(f"\n   [ПОКАЗАННЫЕ РЕКОМЕНДАЦИИ]")
+                    for rec in recommendations:
+                        print(f"      - {rec['text']}")
             
             return True
             
@@ -220,17 +241,21 @@ class InstructionGraph:
         return "\n".join(lines)
     
     def show_history(self):
-        """Показывает историю выполнения"""
+        """Показывает историю выполнения с рекомендациями"""
         print("\n[ИСТОРИЯ ВЫПОЛНЕНИЯ]")
         if not self.execution_history:
             print("   (пусто)")
             return
         
-        for i, (from_state, action_id, to_state) in enumerate(self.execution_history, 1):
-            from_name = self.states[from_state].name if from_state in self.states else from_state
-            to_name = self.states[to_state].name if to_state in self.states else to_state
-            action_name = self.actions[action_id].name if action_id in self.actions else action_id
-            print(f"   {i}. {from_name} -> [{action_name}] -> {to_name}")
+        for i, step in enumerate(self.execution_history, 1):
+            print(f"\n   {i}. {step.from_state_name} -> [{step.action_name}] -> {step.to_state_name}")
+            
+            if step.recommendations:
+                print(f"      Рекомендации:")
+                for rec in step.recommendations:
+                    print(f"        - {rec['text']}")
+            else:
+                print(f"      (рекомендации не показывались)")
     
     def print_statistics(self):
         """Показывает статистику"""
@@ -283,7 +308,6 @@ class InstructionGraph:
             if action.required_objects:
                 print(f"        Требует: {', '.join(action.required_objects)}")
             
-            # Показываем метки для действия - передаем объект action
             if self.label_manager:
                 labels = self.label_manager.get_labels_for_action(action)
                 if labels:

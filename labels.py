@@ -79,7 +79,12 @@ class LabelManager:
         return all_recommendations
     
     def get_top_recommendations_for_action(self, action: Action, top_n: int = 3) -> List[Dict]:
-        """Получение топ-N рекомендаций для действия (ранжированных по полному МАИ)"""
+        """
+        Получение топ-N рекомендаций для действия (ранжированных по полному МАИ)
+        
+        Returns:
+            список рекомендаций с полями text, score, rank
+        """
         recommendations = self.get_recommendations_for_action(action)
         if not recommendations:
             return []

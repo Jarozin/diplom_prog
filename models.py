@@ -133,3 +133,15 @@ class Label:
             if keyword_lower in search_text:
                 return True
         return False
+
+
+@dataclass
+class HistoryStep:
+    """Шаг истории выполнения"""
+    from_state: str
+    from_state_name: str
+    action_id: str
+    action_name: str
+    to_state: str
+    to_state_name: str
+    recommendations: List[Dict]  # Список показанных рекомендаций
