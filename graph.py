@@ -545,26 +545,25 @@ class InstructionGraph:
                 label = f"{state.name}\n{state.description[:20]}" + (f"\n{obj_text}" if obj_text else "")
                 
                 G.add_node(f"state_{state_id}", 
-                          label=label,
-                          type='state',
-                          color=color)
+                        label=label,
+                        type='state',
+                        color=color)
             
             # Добавляем узлы действий
             for action_id, action in self.actions.items():
                 G.add_node(f"action_{action_id}",
-                          label=f"{action.name[:30]}",
-                          type='action',
-                          color=action_color)
+                        label=f"{action.name[:30]}",
+                        type='action',
+                        color=action_color)
             
             # Добавляем узлы объектов (только имена)
             for obj_name in self.objects.keys():
                 G.add_node(f"object_{obj_name}",
-                          label=obj_name,
-                          type='object',
-                          color=object_color)
+                        label=obj_name,
+                        type='object',
+                        color=object_color)
             
-            # Добавляем ребра: состояние -> действие (стрелка)
-            # и действие -> состояние (стрелка)
+            # Добавляем ребра: состояние -> действие и действие -> состояние
             for (from_state, action_id), to_state in self.transitions.items():
                 action = self.actions.get(action_id)
                 if action:
@@ -603,56 +602,132 @@ class InstructionGraph:
                 nodes = [n for n, d in G.nodes(data=True) if d.get('type') == node_type]
                 if nodes:
                     nx.draw_networkx_nodes(G, pos, nodelist=nodes,
-                                         node_color=color, node_size=2500,
-                                         alpha=0.9)
+                                        node_color=color, node_size=2500,
+                                        edgecolors='black', linewidths=1,
+                                        alpha=0.9)
             
-            # Рисуем ребра с направлением (стрелки)
+            # Отдельно рисуем начальное и конечное состояния (чтобы выделить цветом)
+            initial_nodes = [f"state_{sid}" for sid, s in self.states.items() if s.state_type == StateType.INITIAL]
+            final_nodes = [f"state_{sid}" for sid, s in self.states.items() if s.state_type == StateType.FINAL]
+            
+            if initial_nodes:
+                nx.draw_networkx_nodes(G, pos, nodelist=initial_nodes,
+                                    node_color=initial_color, node_size=2500,
+                                    edgecolors='black', linewidths=2,
+                                    alpha=0.9)
+            
+            if final_nodes:
+                nx.draw_networkx_nodes(G, pos, nodelist=final_nodes,
+                                    node_color=final_color, node_size=2500,
+                                    edgecolors='black', linewidths=2,
+                                    alpha=0.9)
+            
+            # Рисуем ребра с явными стрелками
             # Разделяем обычные и пунктирные ребра
             solid_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('style') != 'dashed']
             dashed_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('style') == 'dashed']
             
+            # Рисуем сплошные ребра со стрелками
             if solid_edges:
-                nx.draw_networkx_edges(G, pos, edgelist=solid_edges,
-                                     edge_color='gray', arrows=True, 
-                                     arrowsize=15, arrowstyle='->',
-                                     connectionstyle='arc3,rad=0.1', alpha=0.6)
+                for u, v in solid_edges:
+                    # Получаем координаты узлов
+                    x1, y1 = pos[u]
+                    x2, y2 = pos[v]
+                    
+                    # Рисуем линию
+                    plt.plot([x1, x2], [y1, y2], 'gray', linewidth=1.5, alpha=0.7, zorder=1)
+                    
+                    # Рисуем стрелку в конце линии
+                    dx = x2 - x1
+                    dy = y2 - y1
+                    d = (dx**2 + dy**2)**0.5
+                    if d > 0:
+                        # Позиция стрелки (в 80% от начала к концу)
+                        arrow_pos = 0.85
+                        x_arrow = x1 + dx * arrow_pos
+                        y_arrow = y1 + dy * arrow_pos
+                        
+                        # Нормализованное направление
+                        ndx = dx / d
+                        ndy = dy / d
+                        
+                        # Рисуем стрелку
+                        arrow_length = 0.15
+                        arrow_width = 0.08
+                        plt.arrow(x_arrow, y_arrow, ndx * arrow_length, ndy * arrow_length,
+                                head_width=arrow_width, head_length=arrow_length,
+                                fc='gray', ec='gray', alpha=0.8, zorder=2)
             
+            # Рисуем пунктирные ребра со стрелками
             if dashed_edges:
-                nx.draw_networkx_edges(G, pos, edgelist=dashed_edges,
-                                     edge_color='gray', arrows=True,
-                                     arrowsize=12, arrowstyle='->',
-                                     style='dashed', alpha=0.5)
+                for u, v in dashed_edges:
+                    x1, y1 = pos[u]
+                    x2, y2 = pos[v]
+                    
+                    # Рисуем пунктирную линию
+                    plt.plot([x1, x2], [y1, y2], 'gray', linewidth=1.5, 
+                            linestyle='--', alpha=0.6, zorder=1)
+                    
+                    # Рисуем стрелку в конце линии
+                    dx = x2 - x1
+                    dy = y2 - y1
+                    d = (dx**2 + dy**2)**0.5
+                    if d > 0:
+                        arrow_pos = 0.85
+                        x_arrow = x1 + dx * arrow_pos
+                        y_arrow = y1 + dy * arrow_pos
+                        
+                        ndx = dx / d
+                        ndy = dy / d
+                        
+                        arrow_length = 0.15
+                        arrow_width = 0.08
+                        plt.arrow(x_arrow, y_arrow, ndx * arrow_length, ndy * arrow_length,
+                                head_width=arrow_width, head_length=arrow_length,
+                                fc='gray', ec='gray', alpha=0.7, zorder=2)
             
-            # Рисуем подписи
+            # Рисуем подписи узлов
             labels = nx.get_node_attributes(G, 'label')
-            nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight='bold')
-            
-            # Легенда - только информация о типах узлов и стрелках
+            for node, (x, y) in pos.items():
+                label = labels.get(node, '')
+                plt.text(x, y, label, fontsize=8, fontweight='bold',
+                        ha='center', va='center', zorder=3,
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+        
+        # Легенда
             from matplotlib.patches import Patch
             from matplotlib.lines import Line2D
             
             legend_elements = [
-                Patch(facecolor=state_color, alpha=0.8, edgecolor='black', label='Состояния'),
+                Patch(facecolor=state_color, alpha=0.8, edgecolor='black', label='Состояния (промежуточные)'),
                 Patch(facecolor=action_color, alpha=0.8, edgecolor='black', label='Действия'),
                 Patch(facecolor=object_color, alpha=0.8, edgecolor='black', label='Объекты'),
                 Patch(facecolor=initial_color, alpha=0.8, edgecolor='black', label='Начальное состояние'),
                 Patch(facecolor=final_color, alpha=0.8, edgecolor='black', label='Конечное состояние'),
-                Line2D([0], [0], color='gray', marker='>', markersize=10, 
-                       linestyle='-', linewidth=1, label='Переход (стрелка направления)'),
-                Line2D([0], [0], color='gray', linestyle='--', linewidth=1,
-                       label='Использование объекта (пунктир)')
+                Line2D([0], [0], color='gray', linewidth=1.5, 
+                    marker='>', markersize=10, markeredgewidth=1.5,
+                    label='Переход (направление показано стрелкой)'),
+                Line2D([0], [0], color='gray', linewidth=1.5, linestyle='--',
+                    marker='>', markersize=10, markeredgewidth=1.5,
+                    label='Использование объекта (пунктир со стрелкой)')
             ]
-            plt.legend(handles=legend_elements, loc='upper right', fontsize=10)
+            plt.legend(handles=legend_elements, loc='upper right', fontsize=10, framealpha=0.9)
             
             plt.title(f"Граф инструкций: {self.name}\n(Состояния, действия и объекты как отдельные узлы)", 
-                     fontsize=14, fontweight='bold')
+                    fontsize=14, fontweight='bold')
             plt.axis('off')
+            
+            # Устанавливаем равные пропорции осей
+            plt.gca().set_aspect('equal')
+            
             plt.tight_layout()
             plt.savefig(f"{filename}.png", dpi=300, bbox_inches='tight')
             print(f"[ИНФО] Граф сохранен как {filename}.png")
             plt.show()
         except Exception as e:
             print(f"[ПРЕДУПРЕЖДЕНИЕ] Визуализация не удалась: {e}")
+            import traceback
+            traceback.print_exc()
     
     def print_ascii_graph(self) -> None:
         print("\n" + "="*70)
