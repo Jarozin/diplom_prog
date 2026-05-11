@@ -11,7 +11,7 @@ class AHPMethod:
     
     Включает:
     - Построение матриц парных сравнений
-    - Вычисление собственных векторов
+    - Вычисление собственных векторов через геометрическое среднее
     - Проверку согласованности (CR < 0.1)
     - Расчет глобальных приоритетов
     """
@@ -64,7 +64,12 @@ class AHPMethod:
                     # Ищем сравнение
                     value = comparisons.get((crit_i, crit_j))
                     if value is None:
-                        value = 1.0 / comparisons.get((crit_j, crit_i), 1.0)
+                        # Пробуем обратное сравнение
+                        rev_value = comparisons.get((crit_j, crit_i))
+                        if rev_value is not None:
+                            value = 1.0 / rev_value
+                        else:
+                            value = 1.0
                     matrix[i][j] = value
                     matrix[j][i] = 1.0 / value
         
@@ -74,7 +79,9 @@ class AHPMethod:
     
     def calculate_weights(self) -> Dict[str, float]:
         """
-        Вычисление весов критериев методом собственного вектора
+        Вычисление весов критериев методом геометрического среднего (классический МАИ)
+        
+        Формула: w_i = (∏_{j=1}^n a_ij)^(1/n) / ∑_{k=1}^n (∏_{j=1}^n a_kj)^(1/n)
         
         Returns:
             словарь с весами критериев
@@ -84,22 +91,25 @@ class AHPMethod:
         
         n = len(self.criteria_names)
         
-        # 1. Нормализуем матрицу (делим каждый элемент на сумму столбца)
-        col_sums = self.pairwise_matrix.sum(axis=0)
-        normalized_matrix = self.pairwise_matrix / col_sums
+        # 1. Вычисляем геометрическое среднее по строкам
+        geometric_means = []
+        for i in range(n):
+            # Произведение элементов строки
+            product = np.prod(self.pairwise_matrix[i, :])
+            # Корень степени n
+            gm = product ** (1.0 / n)
+            geometric_means.append(gm)
         
-        # 2. Вычисляем веса как среднее по строкам
-        weights = normalized_matrix.mean(axis=1)
-        
-        # 3. Нормализуем веса (сумма = 1)
-        weights = weights / weights.sum()
+        # 2. Нормализуем (делим на сумму геометрических средних)
+        total = sum(geometric_means)
+        weights = [gm / total for gm in geometric_means]
         
         self.weights = {name: weights[i] for i, name in enumerate(self.criteria_names)}
         return self.weights
     
     def calculate_consistency(self) -> Tuple[float, float, bool]:
         """
-        Проверка согласованности матрицы
+        Проверка согласованности матрицы (классический метод Саати)
         
         Returns:
             (consistency_index, consistency_ratio, is_consistent)
@@ -109,20 +119,23 @@ class AHPMethod:
             raise ValueError("Матрица парных сравнений не создана")
         
         n = len(self.criteria_names)
+        weights_array = np.array(list(self.weights.values()))
         
-        # 1. Вычисляем лямбда-макс (собственное значение)
-        #    Aw = λmax * w
-        aw = self.pairwise_matrix @ np.array(list(self.weights.values()))
-        lambda_max = np.mean(aw / np.array(list(self.weights.values())))
+        # 1. Вычисляем λ_max (главное собственное значение)
+        #  λ_max = (1/n) * ∑ ( (A * w)_i / w_i )
         
-        # 2. Индекс согласованности
+        lambda_max = np.sum(self.pairwise_matrix.sum(axis=0) * weights_array)
+        
+        # 2. Индекс согласованности (Consistency Index)
+        #    CI = (λ_max - n) / (n - 1)
         self.consistency_index = (lambda_max - n) / (n - 1) if n > 1 else 0
         
-        # 3. Отношение согласованности
+        # 3. Отношение согласованности (Consistency Ratio)
+        #    CR = CI / RI
         ri = self.RANDOM_INDICES.get(n, 1.59)
         self.consistency_ratio = self.consistency_index / ri if ri > 0 else 0
         
-        # 4. Проверка
+        # 4. Проверка согласованности
         self.is_consistent = self.consistency_ratio < 0.1
         
         return self.consistency_index, self.consistency_ratio, self.is_consistent
@@ -179,12 +192,14 @@ class AHPMethod:
         print("РЕЗУЛЬТАТЫ МЕТОДА АНАЛИЗА ИЕРАРХИЙ")
         print("="*60)
         
-        print("\n[ВЕСА КРИТЕРИЕВ]")
+        print("\n[ВЕСА КРИТЕРИЕВ (геометрическое среднее)]")
         for name, weight in sorted(self.weights.items(), key=lambda x: x[1], reverse=True):
             print(f"   {name}: {weight:.1%}")
         
         print(f"\n[ПРОВЕРКА СОГЛАСОВАННОСТИ]")
+        print(f"   λ_max: {self._get_lambda_max():.4f}")
         print(f"   Индекс согласованности (ИС): {self.consistency_index:.4f}")
+        print(f"   Случайный индекс (СИ): {self.RANDOM_INDICES.get(len(self.criteria_names), 1.59):.4f}")
         print(f"   Отношение согласованности (ОС): {self.consistency_ratio:.2%}")
         
         if self.is_consistent:
@@ -194,6 +209,15 @@ class AHPMethod:
             print("   Рекомендуется пересмотреть парные сравнения")
         
         self.display_matrix()
+    
+    def _get_lambda_max(self) -> float:
+        """Вычисление λ_max для вывода"""
+        if self.pairwise_matrix is None:
+            return 0.0
+        n = len(self.criteria_names)
+        weights_array = np.array(list(self.weights.values()))
+        aw = self.pairwise_matrix @ weights_array
+        return np.mean(aw / weights_array)
 
 
 class AHPRecommendationRanker:
@@ -217,10 +241,11 @@ class AHPRecommendationRanker:
             comparisons = {}
             
             for key, value in comparisons_raw.items():
-                crit1, crit2 = key.split('_vs_')
-                comparisons[(crit1, crit2)] = value
+                if '_vs_' in key:
+                    crit1, crit2 = key.split('_vs_')
+                    comparisons[(crit1, crit2)] = value
             
-            # Создаем матрицу парных сравнений
+            # Создаем матрицу парных сравнений и вычисляем веса через геометрическое среднее
             if comparisons and len(self.criteria_names) > 1:
                 self.criteria_ahp.create_pairwise_matrix(self.criteria_names, comparisons)
                 self.criteria_ahp.calculate_weights()
@@ -240,22 +265,21 @@ class AHPRecommendationRanker:
             self._set_default_weights()
     
     def _set_default_weights(self) -> None:
-        """Установка стандартных весов (если файл не найден)"""
-        # Используем МАИ для расчета весов на основе стандартных сравнений
+        """Установка стандартных весов через геометрическое среднее"""
         self.criteria_names = ['безопасность', 'полезность', 'актуальность', 'срочность', 'сложность']
         
         # Стандартные парные сравнения (по шкале Саати)
         comparisons = {
-            ('безопасность', 'полезность'): 2,      # безопасность важнее полезности
-            ('безопасность', 'актуальность'): 3,    # безопасность важнее актуальности
-            ('безопасность', 'срочность'): 4,       # безопасность важнее срочности
-            ('безопасность', 'сложность'): 5,       # безопасность важнее сложности
-            ('полезность', 'актуальность'): 2,      # полезность важнее актуальности
-            ('полезность', 'срочность'): 3,         # полезность важнее срочности
-            ('полезность', 'сложность'): 4,         # полезность важнее сложности
-            ('актуальность', 'срочность'): 2,       # актуальность важнее срочности
-            ('актуальность', 'сложность'): 3,       # актуальность важнее сложности
-            ('срочность', 'сложность'): 2,          # срочность важнее сложности
+            ('безопасность', 'полезность'): 2,
+            ('безопасность', 'актуальность'): 3,
+            ('безопасность', 'срочность'): 4,
+            ('безопасность', 'сложность'): 5,
+            ('полезность', 'актуальность'): 2,
+            ('полезность', 'срочность'): 3,
+            ('полезность', 'сложность'): 4,
+            ('актуальность', 'срочность'): 2,
+            ('актуальность', 'сложность'): 3,
+            ('срочность', 'сложность'): 2,
         }
         
         self.criteria_ahp.create_pairwise_matrix(self.criteria_names, comparisons)
