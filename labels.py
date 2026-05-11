@@ -1,8 +1,8 @@
 """Загрузка и управление метками и рекомендациями"""
 
 import json
-from typing import List, Dict, Set
-from models import Label
+from typing import List, Dict, Set, Optional, Tuple
+from models import Label, Action
 
 
 class LabelManager:
@@ -10,6 +10,7 @@ class LabelManager:
     
     def __init__(self, config_file: str = "labels_config.json"):
         self.labels: List[Label] = []
+        self.action_labels_cache: Dict[str, List[Label]] = {}
         self.load_config(config_file)
     
     def load_config(self, config_file: str) -> None:
@@ -32,29 +33,24 @@ class LabelManager:
         except Exception as e:
             print(f"[ПРЕДУПРЕЖДЕНИЕ] Ошибка загрузки меток: {e}")
     
-    def get_labels_for_action(self, action_name: str, action_description: str) -> List[Label]:
-        """Получение меток, подходящих для действия"""
-        text_to_check = f"{action_name} {action_description}"
+    def get_labels_for_action(self, action: Action) -> List[Label]:
+        """Получение меток, подходящих для действия (с кэшированием)"""
+        if action.id in self.action_labels_cache:
+            return self.action_labels_cache[action.id]
+        
+        text_to_check = f"{action.name} {action.description}"
         matched_labels = []
         
         for label in self.labels:
             if label.matches(text_to_check):
                 matched_labels.append(label)
         
+        self.action_labels_cache[action.id] = matched_labels
         return matched_labels
     
-    def get_labels_for_text(self, text: str) -> List[Label]:
-        """Получение меток, подходящих для произвольного текста"""
-        matched_labels = []
-        
-        for label in self.labels:
-            if label.matches(text):
-                matched_labels.append(label)
-        
-        return matched_labels
-    
-    def get_recommendations_for_labels(self, labels: List[Label]) -> List[str]:
-        """Сбор всех рекомендаций из списка меток"""
+    def get_recommendations_for_action(self, action: Action) -> List[str]:
+        """Получение всех рекомендаций для действия"""
+        labels = self.get_labels_for_action(action)
         all_recommendations = []
         seen = set()
         
@@ -66,21 +62,29 @@ class LabelManager:
         
         return all_recommendations
     
-    def display_recommendations(self, action_name: str, action_description: str) -> None:
+    def display_recommendations_for_action(self, action: Action) -> None:
         """Вывод рекомендаций для действия"""
-        labels = self.get_labels_for_action(action_name, action_description)
+        labels = self.get_labels_for_action(action)
+        recommendations = self.get_recommendations_for_action(action)
         
-        if not labels:
-            print("   (нет рекомендаций)")
+        if not recommendations:
+            print("   (нет рекомендаций для этого действия)")
             return
         
-        recommendations = self.get_recommendations_for_labels(labels)
+        print(f"\n   [РЕКОМЕНДАЦИИ ДЛЯ ДЕЙСТВИЯ: {action.name}]")
+        print("   " + "-"*50)
+        for i, rec in enumerate(recommendations, 1):
+            print(f"      {i}. {rec}")
         
-        if recommendations:
-            print("\n   [РЕКОМЕНДАЦИИ]")
-            for i, rec in enumerate(recommendations, 1):
-                print(f"      {i}. {rec}")
-            
-            # Показываем метки, которые вызвали рекомендации
+        # Показываем метки, которые вызвали рекомендации
+        if labels:
             label_names = [label.name for label in labels]
-            print(f"   (метки: {', '.join(label_names)})")
+            print(f"\n   (основано на метках: {', '.join(label_names)})")
+        print("   " + "-"*50)
+    
+    def get_all_labels_info(self) -> List[Tuple[str, List[str], List[str]]]:
+        """Получение информации о всех метках"""
+        result = []
+        for label in self.labels:
+            result.append((label.name, label.keywords, label.recommendations))
+        return result

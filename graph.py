@@ -168,7 +168,7 @@ class InstructionGraph:
                 
                 # Показываем рекомендации для выполненного действия
                 if self.label_manager:
-                    self.label_manager.display_recommendations(action.name, action.description)
+                    self.label_manager.display_recommendations_for_action(action)
             
             return True
             
@@ -283,9 +283,9 @@ class InstructionGraph:
             if action.required_objects:
                 print(f"        Требует: {', '.join(action.required_objects)}")
             
-            # Показываем метки для действия
+            # Показываем метки для действия - передаем объект action
             if self.label_manager:
-                labels = self.label_manager.get_labels_for_action(action.name, action.description)
+                labels = self.label_manager.get_labels_for_action(action)
                 if labels:
                     label_names = [label.name for label in labels]
                     print(f"        Метки: {', '.join(label_names)}")

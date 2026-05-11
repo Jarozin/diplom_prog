@@ -23,11 +23,12 @@ class StateType(Enum):
         return mapping.get(value.lower(), cls.INTERMEDIATE)
     
     def to_rus(self) -> str:
+        """Возвращает русское название типа состояния"""
         mapping = {
-            cls.INITIAL: "Начальное",
-            cls.FINAL: "Конечное",
-            cls.INTERMEDIATE: "Промежуточное",
-            cls.ERROR: "Ошибка"
+            StateType.INITIAL: "Начальное",
+            StateType.FINAL: "Конечное",
+            StateType.INTERMEDIATE: "Промежуточное",
+            StateType.ERROR: "Ошибка"
         }
         return mapping.get(self, "Неизвестно")
 
@@ -117,7 +118,7 @@ class Action:
 
 @dataclass
 class Label:
-    """Метка с рекомендациями"""
+    """Метка с рекомендациями (только для действий)"""
     name: str
     keywords: List[str]
     recommendations: List[str]
@@ -125,7 +126,10 @@ class Label:
     def matches(self, text: str) -> bool:
         """Проверяет, соответствует ли текст метке"""
         text_lower = text.lower()
+        # Удаляем подчеркивания для поиска
+        search_text = text_lower.replace('_', ' ')
         for keyword in self.keywords:
-            if keyword.lower() in text_lower:
+            keyword_lower = keyword.lower().replace('_', ' ')
+            if keyword_lower in search_text:
                 return True
         return False

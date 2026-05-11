@@ -11,7 +11,7 @@ from labels import LabelManager
 
 
 def step_by_step_mode(graph: InstructionGraph):
-    """Интерактивный пошаговый режим"""
+    """Интерактивный пошаговый режим с рекомендациями"""
     print("\n" + "="*70)
     print("ИНТЕРАКТИВНЫЙ ПОШАГОВЫЙ РЕЖИМ")
     print("="*70)
@@ -55,22 +55,26 @@ def step_by_step_mode(graph: InstructionGraph):
             action_name = action.name[:48] + "..." if len(action.name) > 48 else action.name
             print(f"   | {idx:2} | {action_name:<48} | {next_state.name:<21} |")
             
-            # Показываем метки для действия (кратко)
+            # Показываем метки для действия - передаем объект action
             if graph.label_manager:
-                labels = graph.label_manager.get_labels_for_action(action.name, action.description)
+                labels = graph.label_manager.get_labels_for_action(action)
                 if labels:
                     label_names = [label.name for label in labels]
-                    print(f"   |    | (метки: {', '.join(label_names)}){' ' * (48 - len(', '.join(label_names)) - 10)} |                       |")
+                    # Ограничиваем длину строки
+                    label_str = f"метки: {', '.join(label_names)}"
+                    if len(label_str) > 48:
+                        label_str = label_str[:45] + "..."
+                    print(f"   |    | ({label_str:<46}) |                       |")
         
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Выход                                            | -                     |")
+        print("   | i  | Информация о действии (метки и рекомендации)     | -                     |")
         print("   | q  | Показать историю                                 | -                     |")
         print("   | s  | Показать статистику                              | -                     |")
         print("   | v  | Визуализировать граф                             | -                     |")
-        print("   | r  | Показать рекомендации для действия               | -                     |")
         print("   +----+--------------------------------------------------+-----------------------+")
         
-        choice = input("\nВаш выбор: ").strip().lower()
+        choice = input("\nВаш выбор (номер действия или команда): ").strip().lower()
         
         if choice == '0':
             print("\nВыход из пошагового режима.")
@@ -84,17 +88,23 @@ def step_by_step_mode(graph: InstructionGraph):
         elif choice == 'v':
             visualize_graph(graph, "step_visualization")
             continue
-        elif choice == 'r':
+        elif choice == 'i':
             if available_actions:
-                print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ ДЛЯ РЕКОМЕНДАЦИЙ]")
+                print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ ДЛЯ ПРОСМОТРА ИНФОРМАЦИИ]")
                 for idx, (action, _) in enumerate(available_actions, 1):
-                    print(f"   {idx}. {action.name}")
+                    labels = graph.label_manager.get_labels_for_action(action) if graph.label_manager else []
+                    label_str = f" (метки: {', '.join([l.name for l in labels])})" if labels else ""
+                    print(f"   {idx}. {action.name}{label_str}")
                 try:
                     action_choice = int(input("Номер действия: "))
                     if 1 <= action_choice <= len(available_actions):
                         action, _ = available_actions[action_choice - 1]
+                        print(f"\n[ИНФОРМАЦИЯ О ДЕЙСТВИИ: {action.name}]")
+                        print(f"   Описание: {action.description}")
+                        if action.required_objects:
+                            print(f"   Требуемые объекты: {', '.join(action.required_objects)}")
                         if graph.label_manager:
-                            graph.label_manager.display_recommendations(action.name, action.description)
+                            graph.label_manager.display_recommendations_for_action(action)
                     else:
                         print("[ОШИБКА] Неверный номер!")
                 except ValueError:
@@ -103,10 +113,19 @@ def step_by_step_mode(graph: InstructionGraph):
                 print("[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий!")
             continue
         
+        # Попытка выполнить действие
         try:
             idx = int(choice)
             if 1 <= idx <= len(available_actions):
                 action, next_state_id = available_actions[idx - 1]
+                
+                # Показываем рекомендации ПЕРЕД подтверждением выполнения
+                if graph.label_manager:
+                    recommendations = graph.label_manager.get_recommendations_for_action(action)
+                    if recommendations:
+                        print(f"\n[РЕКОМЕНДАЦИИ ДЛЯ ДЕЙСТВИЯ: {action.name}]")
+                        for rec in recommendations:
+                            print(f"   * {rec}")
                 
                 print(f"\nВыполнить действие: {action.name}?")
                 confirm = input("   Подтвердить (y/n): ").strip().lower()
@@ -121,7 +140,7 @@ def step_by_step_mode(graph: InstructionGraph):
             else:
                 print("[ОШИБКА] Неверный номер действия!")
         except ValueError:
-            print("[ОШИБКА] Неверная команда!")
+            print("[ОШИБКА] Неверная команда! Введите номер действия или команду (0, i, q, s, v)")
     
     if steps >= max_steps:
         print(f"\n[ПРЕДУПРЕЖДЕНИЕ] Достигнуто максимальное количество шагов ({max_steps})!")
@@ -172,7 +191,7 @@ def main():
     print("\n" + "="*70)
     print("ВЫБЕРИТЕ РЕЖИМ РАБОТЫ:")
     print("="*70)
-    print("   1. Интерактивный пошаговый режим (ручное управление)")
+    print("   1. Интерактивный пошаговый режим (с рекомендациями)")
     print("   2. Показать информацию о графе")
     print("   3. Визуализировать граф (состояния, действия, объекты)")
     print("   4. Показать все метки и рекомендации")
