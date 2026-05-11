@@ -1,0 +1,279 @@
+{
+  "name": "CoffeePreparation",
+  "objects": [
+    {
+      "name": "kettle",
+      "properties": {
+        "has_water": false,
+        "water_boiled": false
+      }
+    },
+    {
+      "name": "cup",
+      "properties": {
+        "has_water": false,
+        "has_coffee": false,
+        "stirred": false
+      }
+    },
+    {
+      "name": "coffee_jar",
+      "properties": {
+        "coffee_available": true
+      }
+    },
+    {
+      "name": "water_source",
+      "properties": {
+        "water_available": true
+      }
+    }
+  ],
+  "states": [
+    {
+      "id": "s0",
+      "name": "Start",
+      "description": "Начало процесса",
+      "type": "initial",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    },
+    {
+      "id": "s1",
+      "name": "WaterInKettle",
+      "description": "Вода налита в чайник",
+      "type": "intermediate",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    },
+    {
+      "id": "s2",
+      "name": "WaterBoiled",
+      "description": "Вода вскипячена",
+      "type": "intermediate",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    },
+    {
+      "id": "s3",
+      "name": "WaterInCup",
+      "description": "Кипяток налит в кружку",
+      "type": "intermediate",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    },
+    {
+      "id": "s4",
+      "name": "CoffeeAdded",
+      "description": "Кофе добавлен в кружку",
+      "type": "intermediate",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    },
+    {
+      "id": "s5",
+      "name": "Finished",
+      "description": "Кофе готов, перемешан",
+      "type": "final",
+      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "a1",
+      "name": "PourWaterIntoKettle",
+      "description": "Налить воду в чайник",
+      "required_objects": ["kettle", "water_source"],
+      "produced_objects": [],
+      "consumed_objects": [],
+      "preconditions": [
+        {
+          "type": "object_property",
+          "object": "kettle",
+          "property": "has_water",
+          "operator": "==",
+          "value": false
+        },
+        {
+          "type": "object_property",
+          "object": "water_source",
+          "property": "water_available",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "postconditions": [
+        {
+          "type": "set_property",
+          "object": "kettle",
+          "property": "has_water",
+          "value": true
+        },
+        {
+          "type": "print",
+          "message": "Вода налита в чайник"
+        }
+      ]
+    },
+    {
+      "id": "a2",
+      "name": "BoilWater",
+      "description": "Вскипятить воду",
+      "required_objects": ["kettle"],
+      "produced_objects": [],
+      "consumed_objects": [],
+      "preconditions": [
+        {
+          "type": "object_property",
+          "object": "kettle",
+          "property": "has_water",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "kettle",
+          "property": "water_boiled",
+          "operator": "==",
+          "value": false
+        }
+      ],
+      "postconditions": [
+        {
+          "type": "set_property",
+          "object": "kettle",
+          "property": "water_boiled",
+          "value": true
+        },
+        {
+          "type": "print",
+          "message": "Вода вскипячена"
+        }
+      ]
+    },
+    {
+      "id": "a3",
+      "name": "PourWaterIntoCup",
+      "description": "Налить кипяток в кружку",
+      "required_objects": ["kettle", "cup"],
+      "produced_objects": [],
+      "consumed_objects": [],
+      "preconditions": [
+        {
+          "type": "object_property",
+          "object": "kettle",
+          "property": "water_boiled",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "has_water",
+          "operator": "==",
+          "value": false
+        }
+      ],
+      "postconditions": [
+        {
+          "type": "set_property",
+          "object": "cup",
+          "property": "has_water",
+          "value": true
+        },
+        {
+          "type": "print",
+          "message": "Кипяток налит в кружку"
+        }
+      ]
+    },
+    {
+      "id": "a4",
+      "name": "AddCoffee",
+      "description": "Добавить кофе в кружку",
+      "required_objects": ["cup", "coffee_jar"],
+      "produced_objects": [],
+      "consumed_objects": [],
+      "preconditions": [
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "has_water",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "has_coffee",
+          "operator": "==",
+          "value": false
+        },
+        {
+          "type": "object_property",
+          "object": "coffee_jar",
+          "property": "coffee_available",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "postconditions": [
+        {
+          "type": "set_property",
+          "object": "cup",
+          "property": "has_coffee",
+          "value": true
+        },
+        {
+          "type": "print",
+          "message": "Кофе добавлен в кружку"
+        }
+      ]
+    },
+    {
+      "id": "a5",
+      "name": "StirCoffee",
+      "description": "Перемешать кофе",
+      "required_objects": ["cup"],
+      "produced_objects": [],
+      "consumed_objects": [],
+      "preconditions": [
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "has_water",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "has_coffee",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "cup",
+          "property": "stirred",
+          "operator": "==",
+          "value": false
+        }
+      ],
+      "postconditions": [
+        {
+          "type": "set_property",
+          "object": "cup",
+          "property": "stirred",
+          "value": true
+        },
+        {
+          "type": "print",
+          "message": "Кофе перемешан. Напиток готов."
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {"from": "s0", "action": "a1", "to": "s1"},
+    {"from": "s1", "action": "a2", "to": "s2"},
+    {"from": "s2", "action": "a3", "to": "s3"},
+    {"from": "s3", "action": "a4", "to": "s4"},
+    {"from": "s4", "action": "a5", "to": "s5"}
+  ]
+}
