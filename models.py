@@ -121,7 +121,7 @@ class Label:
     """Метка с рекомендациями (только для действий)"""
     name: str
     keywords: List[str]
-    recommendations: List[str]
+    recommendations: List[Dict]  # Список словарей с полями 'text' и 'scores'
     
     def matches(self, text: str) -> bool:
         """Проверяет, соответствует ли текст метке"""

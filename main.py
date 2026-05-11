@@ -11,7 +11,7 @@ from labels import LabelManager
 
 
 def step_by_step_mode(graph: InstructionGraph):
-    """Интерактивный пошаговый режим с рекомендациями"""
+    """Интерактивный пошаговый режим с ранжированными рекомендациями (МАИ)"""
     print("\n" + "="*70)
     print("ИНТЕРАКТИВНЫЙ ПОШАГОВЫЙ РЕЖИМ")
     print("="*70)
@@ -55,12 +55,11 @@ def step_by_step_mode(graph: InstructionGraph):
             action_name = action.name[:48] + "..." if len(action.name) > 48 else action.name
             print(f"   | {idx:2} | {action_name:<48} | {next_state.name:<21} |")
             
-            # Показываем метки для действия - передаем объект action
+            # Показываем метки для действия
             if graph.label_manager:
                 labels = graph.label_manager.get_labels_for_action(action)
                 if labels:
                     label_names = [label.name for label in labels]
-                    # Ограничиваем длину строки
                     label_str = f"метки: {', '.join(label_names)}"
                     if len(label_str) > 48:
                         label_str = label_str[:45] + "..."
@@ -69,6 +68,7 @@ def step_by_step_mode(graph: InstructionGraph):
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Выход                                            | -                     |")
         print("   | i  | Информация о действии (метки и рекомендации)     | -                     |")
+        print("   | a  | Показать результаты МАИ (веса критериев)         | -                     |")
         print("   | q  | Показать историю                                 | -                     |")
         print("   | s  | Показать статистику                              | -                     |")
         print("   | v  | Визуализировать граф                             | -                     |")
@@ -88,6 +88,10 @@ def step_by_step_mode(graph: InstructionGraph):
         elif choice == 'v':
             visualize_graph(graph, "step_visualization")
             continue
+        elif choice == 'a':
+            if graph.label_manager:
+                graph.label_manager.display_criteria_info()
+            continue
         elif choice == 'i':
             if available_actions:
                 print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ ДЛЯ ПРОСМОТРА ИНФОРМАЦИИ]")
@@ -104,7 +108,7 @@ def step_by_step_mode(graph: InstructionGraph):
                         if action.required_objects:
                             print(f"   Требуемые объекты: {', '.join(action.required_objects)}")
                         if graph.label_manager:
-                            graph.label_manager.display_recommendations_for_action(action)
+                            graph.label_manager.display_recommendations_for_action(action, top_n=5)
                     else:
                         print("[ОШИБКА] Неверный номер!")
                 except ValueError:
@@ -119,13 +123,16 @@ def step_by_step_mode(graph: InstructionGraph):
             if 1 <= idx <= len(available_actions):
                 action, next_state_id = available_actions[idx - 1]
                 
-                # Показываем рекомендации ПЕРЕД подтверждением выполнения
+                # Показываем топ-3 ранжированных рекомендаций (по МАИ)
                 if graph.label_manager:
-                    recommendations = graph.label_manager.get_recommendations_for_action(action)
-                    if recommendations:
-                        print(f"\n[РЕКОМЕНДАЦИИ ДЛЯ ДЕЙСТВИЯ: {action.name}]")
-                        for rec in recommendations:
-                            print(f"   * {rec}")
+                    top_recs = graph.label_manager.get_top_recommendations_for_action(action, top_n=3)
+                    if top_recs:
+                        print(f"\n[ТОП-3 РЕКОМЕНДАЦИИ (МАИ) ДЛЯ ДЕЙСТВИЯ: {action.name}]")
+                        print("   " + "-"*55)
+                        for rec in top_recs:
+                            print(f"      {rec['rank']}. {rec['text']}")
+                            print(f"         (оценка: {rec['score']:.3f})")
+                        print("   " + "-"*55)
                 
                 print(f"\nВыполнить действие: {action.name}?")
                 confirm = input("   Подтвердить (y/n): ").strip().lower()
@@ -140,7 +147,7 @@ def step_by_step_mode(graph: InstructionGraph):
             else:
                 print("[ОШИБКА] Неверный номер действия!")
         except ValueError:
-            print("[ОШИБКА] Неверная команда! Введите номер действия или команду (0, i, q, s, v)")
+            print("[ОШИБКА] Неверная команда! Введите номер действия или команду (0, i, a, q, s, v)")
     
     if steps >= max_steps:
         print(f"\n[ПРЕДУПРЕЖДЕНИЕ] Достигнуто максимальное количество шагов ({max_steps})!")
@@ -155,9 +162,10 @@ def main():
     print("ЗАГРУЗЧИК ГРАФА ИНСТРУКЦИЙ (Сеть Петри + Диаграмма состояний)")
     print("=" * 70)
     
-    # Загружаем менеджер меток
+    # Загружаем менеджер меток (с полным МАИ)
     labels_config = "labels_config.json"
-    label_manager = LabelManager(labels_config)
+    ahp_config = "ahp_criteria_config.json"
+    label_manager = LabelManager(labels_config, ahp_config)
     
     if len(sys.argv) > 1:
         json_file = sys.argv[1]
@@ -191,14 +199,15 @@ def main():
     print("\n" + "="*70)
     print("ВЫБЕРИТЕ РЕЖИМ РАБОТЫ:")
     print("="*70)
-    print("   1. Интерактивный пошаговый режим (с рекомендациями)")
+    print("   1. Интерактивный пошаговый режим (с ранжированными рекомендациями по МАИ)")
     print("   2. Показать информацию о графе")
     print("   3. Визуализировать граф (состояния, действия, объекты)")
     print("   4. Показать все метки и рекомендации")
+    print("   5. Показать результаты МАИ (веса критериев и проверка согласованности)")
     print("   0. Выход")
     print("="*70)
     
-    choice = input("\nВаш выбор (0-4): ").strip()
+    choice = input("\nВаш выбор (0-5): ").strip()
     
     if choice == '1':
         print("\nЗапуск пошагового режима...")
@@ -225,10 +234,21 @@ def main():
         for label in label_manager.labels:
             print(f"\nМетка: {label.name}")
             print(f"   Ключевые слова: {', '.join(label.keywords)}")
-            print(f"   Рекомендации:")
+            print(f"   Рекомендации с оценками:")
             for i, rec in enumerate(label.recommendations, 1):
-                print(f"      {i}. {rec}")
+                text = rec.get('text', '') if isinstance(rec, dict) else rec
+                scores = rec.get('scores', {}) if isinstance(rec, dict) else {}
+                scores_str = ", ".join([f"{k}={v:.2f}" for k, v in scores.items()])
+                print(f"      {i}. {text}")
+                if scores_str:
+                    print(f"         оценки: {scores_str}")
         print("\n" + "="*70)
+    
+    elif choice == '5':
+        if label_manager:
+            label_manager.display_criteria_info()
+        else:
+            print("[ОШИБКА] Информация о критериях недоступна!")
         
     elif choice == '0':
         print("\nДо свидания!")
