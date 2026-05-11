@@ -1,98 +1,127 @@
 {
-  "name": "CoffeePreparation",
+  "name": "ПриготовлениеКофе",
   "objects": [
     {
-      "name": "kettle",
-      "properties": {
-        "has_water": false,
-        "water_boiled": false
-      }
+      "name": "чайник",
+      "properties": {}
     },
     {
-      "name": "cup",
-      "properties": {
-        "has_water": false,
-        "has_coffee": false,
-        "stirred": false
-      }
+      "name": "кружка",
+      "properties": {}
     },
     {
-      "name": "coffee_jar",
-      "properties": {
-        "coffee_available": true
-      }
+      "name": "банка_кофе",
+      "properties": {}
     },
     {
-      "name": "water_source",
-      "properties": {
-        "water_available": true
-      }
+      "name": "источник_воды",
+      "properties": {}
+    },
+    {
+      "name": "ложка",
+      "properties": {}
     }
   ],
   "states": [
     {
       "id": "s0",
-      "name": "Start",
-      "description": "Начало процесса",
+      "name": "Начало",
+      "description": "Начальное состояние, все предметы на месте",
       "type": "initial",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": false, "вода_вскипячена": false},
+        "кружка": {"содержит_воду": false, "содержит_кофе": false, "перемешано": false},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": true}
+      }
     },
     {
       "id": "s1",
-      "name": "WaterInKettle",
+      "name": "ВодаНалитаВЧайник",
       "description": "Вода налита в чайник",
       "type": "intermediate",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": true, "вода_вскипячена": false},
+        "кружка": {"содержит_воду": false, "содержит_кофе": false, "перемешано": false},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": true}
+      }
     },
     {
       "id": "s2",
-      "name": "WaterBoiled",
-      "description": "Вода вскипячена",
+      "name": "ВодаВскипячена",
+      "description": "Вода в чайнике вскипячена",
       "type": "intermediate",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": true, "вода_вскипячена": true},
+        "кружка": {"содержит_воду": false, "содержит_кофе": false, "перемешано": false},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": true}
+      }
     },
     {
       "id": "s3",
-      "name": "WaterInCup",
+      "name": "КипятокВКружке",
       "description": "Кипяток налит в кружку",
       "type": "intermediate",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": false, "вода_вскипячена": true},
+        "кружка": {"содержит_воду": true, "содержит_кофе": false, "перемешано": false},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": true}
+      }
     },
     {
       "id": "s4",
-      "name": "CoffeeAdded",
+      "name": "КофеДобавлен",
       "description": "Кофе добавлен в кружку",
       "type": "intermediate",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": false, "вода_вскипячена": true},
+        "кружка": {"содержит_воду": true, "содержит_кофе": true, "перемешано": false},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": true}
+      }
     },
     {
       "id": "s5",
-      "name": "Finished",
+      "name": "Готово",
       "description": "Кофе готов, перемешан",
       "type": "final",
-      "objects_present": ["kettle", "cup", "coffee_jar", "water_source"]
+      "objects_state": {
+        "чайник": {"содержит_воду": false, "вода_вскипячена": true},
+        "кружка": {"содержит_воду": true, "содержит_кофе": true, "перемешано": true},
+        "банка_кофе": {"кофе_есть": true},
+        "источник_воды": {"вода_есть": true},
+        "ложка": {"чистая": false}
+      }
     }
   ],
   "actions": [
     {
       "id": "a1",
-      "name": "PourWaterIntoKettle",
-      "description": "Налить воду в чайник",
-      "required_objects": ["kettle", "water_source"],
+      "name": "НалитьВодуВЧайник",
+      "description": "Налить воду из источника в чайник",
+      "required_objects": ["чайник", "источник_воды"],
       "produced_objects": [],
       "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
-          "object": "kettle",
-          "property": "has_water",
+          "object": "чайник",
+          "property": "содержит_воду",
           "operator": "==",
           "value": false
         },
         {
           "type": "object_property",
-          "object": "water_source",
-          "property": "water_available",
+          "object": "источник_воды",
+          "property": "вода_есть",
           "operator": "==",
           "value": true
         }
@@ -100,8 +129,8 @@
       "postconditions": [
         {
           "type": "set_property",
-          "object": "kettle",
-          "property": "has_water",
+          "object": "чайник",
+          "property": "содержит_воду",
           "value": true
         },
         {
@@ -112,23 +141,23 @@
     },
     {
       "id": "a2",
-      "name": "BoilWater",
-      "description": "Вскипятить воду",
-      "required_objects": ["kettle"],
+      "name": "ВскипятитьВоду",
+      "description": "Вскипятить воду в чайнике",
+      "required_objects": ["чайник"],
       "produced_objects": [],
       "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
-          "object": "kettle",
-          "property": "has_water",
+          "object": "чайник",
+          "property": "содержит_воду",
           "operator": "==",
           "value": true
         },
         {
           "type": "object_property",
-          "object": "kettle",
-          "property": "water_boiled",
+          "object": "чайник",
+          "property": "вода_вскипячена",
           "operator": "==",
           "value": false
         }
@@ -136,8 +165,8 @@
       "postconditions": [
         {
           "type": "set_property",
-          "object": "kettle",
-          "property": "water_boiled",
+          "object": "чайник",
+          "property": "вода_вскипячена",
           "value": true
         },
         {
@@ -148,23 +177,30 @@
     },
     {
       "id": "a3",
-      "name": "PourWaterIntoCup",
-      "description": "Налить кипяток в кружку",
-      "required_objects": ["kettle", "cup"],
+      "name": "НалитьКипятокВКружку",
+      "description": "Перелить кипяток из чайника в кружку",
+      "required_objects": ["чайник", "кружка"],
       "produced_objects": [],
       "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
-          "object": "kettle",
-          "property": "water_boiled",
+          "object": "чайник",
+          "property": "вода_вскипячена",
           "operator": "==",
           "value": true
         },
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "has_water",
+          "object": "чайник",
+          "property": "содержит_воду",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "type": "object_property",
+          "object": "кружка",
+          "property": "содержит_воду",
           "operator": "==",
           "value": false
         }
@@ -172,8 +208,14 @@
       "postconditions": [
         {
           "type": "set_property",
-          "object": "cup",
-          "property": "has_water",
+          "object": "чайник",
+          "property": "содержит_воду",
+          "value": false
+        },
+        {
+          "type": "set_property",
+          "object": "кружка",
+          "property": "содержит_воду",
           "value": true
         },
         {
@@ -184,30 +226,30 @@
     },
     {
       "id": "a4",
-      "name": "AddCoffee",
-      "description": "Добавить кофе в кружку",
-      "required_objects": ["cup", "coffee_jar"],
+      "name": "ДобавитьКофе",
+      "description": "Добавить кофе из банки в кружку",
+      "required_objects": ["кружка", "банка_кофе"],
       "produced_objects": [],
       "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "has_water",
+          "object": "кружка",
+          "property": "содержит_воду",
           "operator": "==",
           "value": true
         },
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "has_coffee",
+          "object": "кружка",
+          "property": "содержит_кофе",
           "operator": "==",
           "value": false
         },
         {
           "type": "object_property",
-          "object": "coffee_jar",
-          "property": "coffee_available",
+          "object": "банка_кофе",
+          "property": "кофе_есть",
           "operator": "==",
           "value": true
         }
@@ -215,8 +257,8 @@
       "postconditions": [
         {
           "type": "set_property",
-          "object": "cup",
-          "property": "has_coffee",
+          "object": "кружка",
+          "property": "содержит_кофе",
           "value": true
         },
         {
@@ -227,30 +269,30 @@
     },
     {
       "id": "a5",
-      "name": "StirCoffee",
-      "description": "Перемешать кофе",
-      "required_objects": ["cup"],
+      "name": "ПеремешатьКофе",
+      "description": "Перемешать кофе в кружке ложкой",
+      "required_objects": ["кружка", "ложка"],
       "produced_objects": [],
       "consumed_objects": [],
       "preconditions": [
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "has_water",
+          "object": "кружка",
+          "property": "содержит_воду",
           "operator": "==",
           "value": true
         },
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "has_coffee",
+          "object": "кружка",
+          "property": "содержит_кофе",
           "operator": "==",
           "value": true
         },
         {
           "type": "object_property",
-          "object": "cup",
-          "property": "stirred",
+          "object": "кружка",
+          "property": "перемешано",
           "operator": "==",
           "value": false
         }
@@ -258,9 +300,15 @@
       "postconditions": [
         {
           "type": "set_property",
-          "object": "cup",
-          "property": "stirred",
+          "object": "кружка",
+          "property": "перемешано",
           "value": true
+        },
+        {
+          "type": "set_property",
+          "object": "ложка",
+          "property": "чистая",
+          "value": false
         },
         {
           "type": "print",

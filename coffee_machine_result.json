@@ -1,47 +1,25 @@
 {
-  "execution_history": [
-    [
-      "s0",
-      "a1",
-      "s1"
-    ],
-    [
-      "s1",
-      "a2",
-      "s2"
-    ],
-    [
-      "s2",
-      "a3",
-      "s3"
-    ],
-    [
-      "s3",
-      "a4",
-      "s4"
-    ],
-    [
-      "s4",
-      "a5",
-      "s5"
-    ]
-  ],
-  "final_state": "s5",
-  "objects_state": {
-    "kettle": {
-      "has_water": true,
-      "water_boiled": true
+  "execution_history": [],
+  "final_state_id": "s0",
+  "final_state_name": "Начало",
+  "final_objects_state": {
+    "чайник": {
+      "содержит_воду": false,
+      "вода_вскипячена": false
     },
-    "cup": {
-      "has_water": true,
-      "has_coffee": true,
-      "stirred": true
+    "кружка": {
+      "содержит_воду": false,
+      "содержит_кофе": false,
+      "перемешано": false
     },
-    "coffee_jar": {
-      "coffee_available": true
+    "банка_кофе": {
+      "кофе_есть": true
     },
-    "water_source": {
-      "water_available": true
+    "источник_воды": {
+      "вода_есть": true
+    },
+    "ложка": {
+      "чистая": true
     }
   }
 }

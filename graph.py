@@ -22,13 +22,21 @@ class StateType(Enum):
             "error": cls.ERROR
         }
         return mapping.get(value.lower(), cls.INTERMEDIATE)
+    
+    def to_rus(self) -> str:
+        mapping = {
+            cls.INITIAL: "Начальное",
+            cls.FINAL: "Конечное",
+            cls.INTERMEDIATE: "Промежуточное",
+            cls.ERROR: "Ошибка"
+        }
+        return mapping.get(self, "Неизвестно")
 
 
 @dataclass
 class Object:
     name: str
     properties: Dict[str, Any] = field(default_factory=dict)
-    current_state_id: Optional[str] = None
     
     def __hash__(self):
         return hash(self.name)
@@ -37,20 +45,13 @@ class Object:
         return self.name == other.name if isinstance(other, Object) else False
     
     def __str__(self):
-        props = ", ".join(f"{k}={v}" for k, v in self.properties.items())
-        return f"{self.name}({props})" if props else self.name
+        return self.name
     
     def get_property(self, prop_name: str):
-        if '.' in prop_name:
-            parts = prop_name.split('.')
-            value = self.properties
-            for part in parts:
-                if isinstance(value, dict):
-                    value = value.get(part)
-                else:
-                    value = getattr(value, part, None)
-            return value
         return self.properties.get(prop_name)
+    
+    def set_property(self, prop_name: str, value: Any):
+        self.properties[prop_name] = value
 
 
 @dataclass
@@ -59,8 +60,7 @@ class State:
     name: str
     description: str = ""
     state_type: StateType = StateType.INTERMEDIATE
-    objects_present: Set[str] = field(default_factory=set)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    objects_state: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     
     def __hash__(self):
         return hash(self.id)
@@ -79,7 +79,6 @@ class Action:
     postconditions: List[Dict] = field(default_factory=list)
     execution_time: float = 1.0
     probability: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
     
     _precondition_funcs: List[Callable] = field(default_factory=list, repr=False)
     _postcondition_funcs: List[Callable] = field(default_factory=list, repr=False)
@@ -92,7 +91,7 @@ class Action:
     
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         if not self.can_execute(context):
-            raise ValueError(f"Action {self.name} cannot be executed")
+            raise ValueError(f"Действие {self.name} не может быть выполнено")
         
         for postcondition in self._postcondition_funcs:
             postcondition(context)
@@ -109,7 +108,6 @@ class InstructionGraph:
         self.transitions: Dict[tuple, str] = {}
         self.current_state_id: Optional[str] = None
         self.execution_history: List[tuple] = []
-        self.tokens: Dict[str, int] = defaultdict(int)
         
     @classmethod
     def from_json(cls, json_file: str):
@@ -118,23 +116,26 @@ class InstructionGraph:
         
         graph = cls(data.get('name', 'InstructionGraph'))
         
+        # Загружаем объекты (без состояния, только имена)
         for obj_data in data.get('objects', []):
             obj = Object(
                 name=obj_data['name'],
-                properties=obj_data.get('properties', {})
+                properties={}
             )
             graph.add_object(obj)
         
+        # Загружаем состояния с objects_state
         for state_data in data.get('states', []):
             state = State(
                 id=state_data['id'],
                 name=state_data['name'],
                 description=state_data.get('description', ''),
                 state_type=StateType.from_string(state_data.get('type', 'intermediate')),
-                objects_present=set(state_data.get('objects_present', []))
+                objects_state=state_data.get('objects_state', {})
             )
             graph.add_state(state)
         
+        # Загружаем действия
         for action_data in data.get('actions', []):
             action = Action(
                 id=action_data['id'],
@@ -152,6 +153,7 @@ class InstructionGraph:
             action._postcondition_funcs = cls._compile_conditions(action.postconditions, graph)
             graph.add_action(action)
         
+        # Загружаем переходы
         for trans_data in data.get('transitions', []):
             graph.add_transition(
                 trans_data['from'],
@@ -176,10 +178,17 @@ class InstructionGraph:
                 
                 def make_check(obj_name, prop_name, operator, value):
                     def check(context):
-                        obj = context['objects'].get(obj_name)
-                        if not obj:
+                        # Получаем состояние объектов из текущего состояния графа
+                        current_state_id = context['current_state']
+                        current_state = graph.states.get(current_state_id)
+                        if not current_state:
                             return False
-                        prop_value = obj.get_property(prop_name)
+                        
+                        obj_state = current_state.objects_state.get(obj_name, {})
+                        prop_value = obj_state.get(prop_name)
+                        
+                        if prop_value is None:
+                            return False
                         
                         if operator == '>':
                             return prop_value > value
@@ -205,9 +214,13 @@ class InstructionGraph:
                 
                 def make_setter(obj_name, prop_name, value):
                     def setter(context):
-                        obj = context['objects'].get(obj_name)
-                        if obj:
-                            obj.properties[prop_name] = value
+                        # Изменяем objects_state в следующем состоянии
+                        if 'next_state_id' in context:
+                            next_state = graph.states.get(context['next_state_id'])
+                            if next_state:
+                                if obj_name not in next_state.objects_state:
+                                    next_state.objects_state[obj_name] = {}
+                                next_state.objects_state[obj_name][prop_name] = value
                     return setter
                 
                 compiled.append(make_setter(obj_name, prop_name, value))
@@ -220,17 +233,20 @@ class InstructionGraph:
                 
                 def make_modifier(obj_name, prop_name, operation, value):
                     def modifier(context):
-                        obj = context['objects'].get(obj_name)
-                        if obj:
-                            current = obj.properties.get(prop_name, 0)
-                            if operation == 'add':
-                                obj.properties[prop_name] = current + value
-                            elif operation == 'subtract':
-                                obj.properties[prop_name] = current - value
-                            elif operation == 'multiply':
-                                obj.properties[prop_name] = current * value
-                            elif operation == 'divide':
-                                obj.properties[prop_name] = current / value
+                        if 'next_state_id' in context:
+                            next_state = graph.states.get(context['next_state_id'])
+                            if next_state:
+                                if obj_name not in next_state.objects_state:
+                                    next_state.objects_state[obj_name] = {}
+                                current = next_state.objects_state[obj_name].get(prop_name, 0)
+                                if operation == 'add':
+                                    next_state.objects_state[obj_name][prop_name] = current + value
+                                elif operation == 'subtract':
+                                    next_state.objects_state[obj_name][prop_name] = current - value
+                                elif operation == 'multiply':
+                                    next_state.objects_state[obj_name][prop_name] = current * value
+                                elif operation == 'divide':
+                                    next_state.objects_state[obj_name][prop_name] = current / value
                     return modifier
                 
                 compiled.append(make_modifier(obj_name, prop_name, operation, value))
@@ -241,11 +257,15 @@ class InstructionGraph:
                 def make_printer(message_template):
                     def printer(context):
                         message = message_template
-                        for obj_name, obj in context['objects'].items():
-                            for prop_name, prop_value in obj.properties.items():
-                                placeholder = f"{{{obj_name}.{prop_name}}}"
-                                if placeholder in message:
-                                    message = message.replace(placeholder, str(prop_value))
+                        # Подстановка переменных из objects_state текущего состояния
+                        current_state_id = context['current_state']
+                        current_state = graph.states.get(current_state_id)
+                        if current_state:
+                            for obj_name, obj_props in current_state.objects_state.items():
+                                for prop_name, prop_value in obj_props.items():
+                                    placeholder = f"{{{obj_name}.{prop_name}}}"
+                                    if placeholder in message:
+                                        message = message.replace(placeholder, str(prop_value))
                         print(f"      {message}")
                     return printer
                 
@@ -257,7 +277,6 @@ class InstructionGraph:
         self.states[state.id] = state
         if state.state_type == StateType.INITIAL and self.current_state_id is None:
             self.current_state_id = state.id
-            self.tokens[state.id] = 1
     
     def add_action(self, action: Action) -> None:
         self.actions[action.id] = action
@@ -267,11 +286,11 @@ class InstructionGraph:
     
     def add_transition(self, from_state_id: str, action_id: str, to_state_id: str) -> None:
         if from_state_id not in self.states:
-            raise ValueError(f"State {from_state_id} not found")
+            raise ValueError(f"Состояние {from_state_id} не найдено")
         if action_id not in self.actions:
-            raise ValueError(f"Action {action_id} not found")
+            raise ValueError(f"Действие {action_id} не найдено")
         if to_state_id not in self.states:
-            raise ValueError(f"State {to_state_id} not found")
+            raise ValueError(f"Состояние {to_state_id} не найдено")
         
         self.transitions[(from_state_id, action_id)] = to_state_id
     
@@ -291,83 +310,80 @@ class InstructionGraph:
         
         return available
     
-    def execute_action(self, action_id: str, object_mapping: Optional[Dict[str, Object]] = None, silent: bool = False) -> bool:
+    def execute_action(self, action_id: str, silent: bool = False) -> bool:
         if self.current_state_id is None:
             if not silent:
-                print("No current state set")
+                print("Нет текущего состояния")
             return False
         
         transition_key = (self.current_state_id, action_id)
         if transition_key not in self.transitions:
             if not silent:
-                print(f"No transition from {self.current_state_id} with action {action_id}")
+                print(f"Нет перехода из {self.current_state_id} с действием {action_id}")
             return False
         
         action = self.actions.get(action_id)
         if not action:
             if not silent:
-                print(f"Action {action_id} not found")
+                print(f"Действие {action_id} не найдено")
             return False
         
-        context = self._get_context(object_mapping)
+        next_state_id = self.transitions[transition_key]
+        context = self._get_context(next_state_id)
         
         try:
             new_context = action.execute(context)
-            self._update_context(new_context)
+            self._update_context(new_context, next_state_id)
             
             old_state = self.current_state_id
-            self.current_state_id = self.transitions[transition_key]
-            
-            self.tokens[old_state] -= 1
-            self.tokens[self.current_state_id] += 1
-            
-            if self.current_state_id in self.states:
-                current_state = self.states[self.current_state_id]
-                for obj_name in current_state.objects_present:
-                    if obj_name in self.objects:
-                        self.objects[obj_name].current_state_id = self.current_state_id
+            self.current_state_id = next_state_id
             
             self.execution_history.append((old_state, action_id, self.current_state_id))
             
             if not silent:
-                print(f"\n[OK] Executed: {action.name}")
-                print(f"     From: {self.states[old_state].name}")
-                print(f"     To: {self.states[self.current_state_id].name}")
+                print(f"\n[ВЫПОЛНЕНО] {action.name}")
+                print(f"     Из: {self.states[old_state].name}")
+                print(f"     В: {self.states[self.current_state_id].name}")
                 
                 if action.consumed_objects:
-                    print(f"     Consumed: {', '.join(action.consumed_objects)}")
+                    print(f"     Потреблено: {', '.join(action.consumed_objects)}")
                 if action.produced_objects:
-                    print(f"     Produced: {', '.join(action.produced_objects)}")
+                    print(f"     Создано: {', '.join(action.produced_objects)}")
             
             return True
             
         except Exception as e:
             if not silent:
-                print(f"[ERROR] Failed to execute {action.name}: {e}")
+                print(f"[ОШИБКА] При выполнении {action.name}: {e}")
             return False
     
-    def _get_context(self, object_mapping: Optional[Dict[str, Object]] = None) -> Dict[str, Any]:
+    def _get_context(self, next_state_id: Optional[str] = None) -> Dict[str, Any]:
         context = {
             'current_state': self.current_state_id,
-            'objects': object_mapping or self.objects.copy(),
-            'tokens': dict(self.tokens),
+            'next_state_id': next_state_id,
+            'objects': self.objects.copy(),
             'execution_history': self.execution_history.copy()
         }
         return context
     
-    def _update_context(self, context: Dict[str, Any]) -> None:
+    def _update_context(self, context: Dict[str, Any], next_state_id: str) -> None:
+        # Обновляем объекты (только имена, состояние хранится в state)
         if 'objects' in context:
             self.objects.update(context['objects'])
-        if 'tokens' in context:
-            self.tokens.update(context['tokens'])
+    
+    def get_current_objects_state(self) -> Dict[str, Dict[str, Any]]:
+        """Получить состояние объектов в текущем состоянии графа"""
+        if self.current_state_id and self.current_state_id in self.states:
+            return self.states[self.current_state_id].objects_state
+        return {}
     
     def step_by_step_mode(self):
         print("\n" + "="*70)
-        print("INTERACTIVE STEP-BY-STEP MODE")
+        print("ИНТЕРАКТИВНЫЙ ПОШАГОВЫЙ РЕЖИМ")
         print("="*70)
         
         if self.current_state_id is None:
-            print("[ERROR] No initial state!")
+            print("[ОШИБКА] Нет начального состояния!")
             return
         
         steps = 0
@@ -376,48 +392,48 @@ class InstructionGraph:
         while steps < max_steps:
             current_state = self.states[self.current_state_id]
             print("\n" + "-"*70)
-            print(f"[CURRENT STATE] {current_state.name}")
-            print(f"   Description: {current_state.description}")
+            print(f"[ТЕКУЩЕЕ СОСТОЯНИЕ] {current_state.name}")
+            print(f"   Описание: {current_state.description}")
+            print(f"   Тип: {current_state.state_type.to_rus()}")
             
-            state_types = {
-                StateType.INITIAL: "Initial",
-                StateType.FINAL: "Final",
-                StateType.ERROR: "Error",
-                StateType.INTERMEDIATE: "Intermediate"
-            }
-            print(f"   Type: {state_types.get(current_state.state_type, 'Unknown')}")
+            # Показываем состояние объектов
+            if current_state.objects_state:
+                print("\n   Состояние объектов:")
+                for obj_name, obj_props in current_state.objects_state.items():
+                    props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
+                    print(f"      {obj_name}: {props_str}")
             
             if current_state.state_type in [StateType.FINAL, StateType.ERROR]:
-                print(f"\n{'[FINAL STATE REACHED]' if current_state.state_type == StateType.FINAL else '[ERROR STATE REACHED]'}")
+                print(f"\n{'[ДОСТИГНУТО КОНЕЧНОЕ СОСТОЯНИЕ]' if current_state.state_type == StateType.FINAL else '[ДОСТИГНУТО СОСТОЯНИЕ ОШИБКИ]'}")
                 break
             
             available_actions = self.get_available_actions()
             
             if not available_actions:
-                print("\n[WARNING] No available actions from current state!")
+                print("\n[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий из текущего состояния!")
                 break
             
-            print(f"\n[AVAILABLE ACTIONS] ({len(available_actions)}):")
-            print("   +----+------------------------------------------+-----------------------+")
-            print("   | No | Action                                   | Next State            |")
-            print("   +----+------------------------------------------+-----------------------+")
+            print(f"\n[ДОСТУПНЫЕ ДЕЙСТВИЯ] ({len(available_actions)}):")
+            print("   +----+--------------------------------------------------+-----------------------+")
+            print("   | №  | Действие                                         | Следующее состояние   |")
+            print("   +----+--------------------------------------------------+-----------------------+")
             
             for idx, (action, next_state_id) in enumerate(available_actions, 1):
                 next_state = self.states[next_state_id]
-                action_name = action.name[:40] + "..." if len(action.name) > 40 else action.name
-                print(f"   | {idx:2} | {action_name:<40} | {next_state.name:<21} |")
+                action_name = action.name[:48] + "..." if len(action.name) > 48 else action.name
+                print(f"   | {idx:2} | {action_name:<48} | {next_state.name:<21} |")
             
-            print("   +----+------------------------------------------+-----------------------+")
-            print("   | 0  | Exit                                     | -                     |")
-            print("   | q  | Show history                             | -                     |")
-            print("   | s  | Show statistics                          | -                     |")
-            print("   | v  | Visualize graph                          | -                     |")
-            print("   +----+------------------------------------------+-----------------------+")
+            print("   +----+--------------------------------------------------+-----------------------+")
+            print("   | 0  | Выход                                            | -                     |")
+            print("   | q  | Показать историю                                 | -                     |")
+            print("   | s  | Показать статистику                              | -                     |")
+            print("   | v  | Визуализировать граф                             | -                     |")
+            print("   +----+--------------------------------------------------+-----------------------+")
             
-            choice = input("\nYour choice: ").strip().lower()
+            choice = input("\nВаш выбор: ").strip().lower()
             
             if choice == '0':
-                print("\nExiting step-by-step mode.")
+                print("\nВыход из пошагового режима.")
                 break
             elif choice == 'q':
                 self.show_history()
@@ -434,32 +450,32 @@ class InstructionGraph:
                 if 1 <= idx <= len(available_actions):
                     action, next_state_id = available_actions[idx - 1]
                     
-                    print(f"\nExecute action: {action.name}?")
-                    confirm = input("   Confirm (y/n): ").strip().lower()
+                    print(f"\nВыполнить действие: {action.name}?")
+                    confirm = input("   Подтвердить (y/n): ").strip().lower()
                     
                     if confirm == 'y':
-                        print(f"\nExecuting: {action.name}...")
+                        print(f"\nВыполняется: {action.name}...")
                         success = self.execute_action(action.id)
                         if success:
                             steps += 1
                     else:
-                        print("   Action cancelled.")
+                        print("   Действие отменено.")
                 else:
-                    print("[ERROR] Invalid action number!")
+                    print("[ОШИБКА] Неверный номер действия!")
             except ValueError:
-                print("[ERROR] Invalid command!")
+                print("[ОШИБКА] Неверная команда!")
         
         if steps >= max_steps:
-            print(f"\n[WARNING] Maximum steps reached ({max_steps})!")
+            print(f"\n[ПРЕДУПРЕЖДЕНИЕ] Достигнуто максимальное количество шагов ({max_steps})!")
         
         print("\n" + "="*70)
-        print(f"Step-by-step mode finished. Steps executed: {steps}")
+        print(f"Пошаговый режим завершен. Выполнено шагов: {steps}")
         print("="*70)
     
     def show_history(self):
-        print("\n[EXECUTION HISTORY]")
+        print("\n[ИСТОРИЯ ВЫПОЛНЕНИЯ]")
         if not self.execution_history:
-            print("   (empty)")
+            print("   (пусто)")
             return
         
         for i, (from_state, action_id, to_state) in enumerate(self.execution_history, 1):
@@ -469,189 +485,169 @@ class InstructionGraph:
             print(f"   {i}. {from_name} -> [{action_name}] -> {to_name}")
     
     def print_statistics(self):
-        print("\n[CURRENT STATISTICS]")
-        print(f"   Current state: {self.states[self.current_state_id].name if self.current_state_id else 'None'}")
-        print(f"   Actions executed: {len(self.execution_history)}")
-        print(f"   Available actions: {len(self.get_available_actions())}")
-        print(f"   Total states: {len(self.states)}")
-        print(f"   Total objects: {len(self.objects)}")
+        print("\n[ТЕКУЩАЯ СТАТИСТИКА]")
+        print(f"   Текущее состояние: {self.states[self.current_state_id].name if self.current_state_id else 'Нет'}")
+        print(f"   Выполнено действий: {len(self.execution_history)}")
+        print(f"   Доступно действий: {len(self.get_available_actions())}")
+        print(f"   Всего состояний: {len(self.states)}")
+        print(f"   Всего объектов: {len(self.objects)}")
         
-        print(f"\n[OBJECTS STATE]")
-        for obj in self.objects.values():
-            print(f"   {obj}")
+        # Показываем состояние объектов из текущего состояния
+        objects_state = self.get_current_objects_state()
+        if objects_state:
+            print(f"\n[СОСТОЯНИЕ ОБЪЕКТОВ В ТЕКУЩЕМ СОСТОЯНИИ]")
+            for obj_name, obj_props in objects_state.items():
+                props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
+                print(f"   {obj_name}: {props_str}")
     
     def visualize(self, filename: str = "instruction_graph") -> None:
         try:
             G = nx.MultiDiGraph()
             
-            # Node colors for different types
-            state_color = 'lightblue'
-            action_color = 'lightgreen'
-            object_color = 'lightyellow'
-            initial_color = 'lightcoral'
-            final_color = 'lightgray'
+            # Цвета для разных типов узлов
+            state_color = '#AED6F1'      # светлый синий
+            action_color = '#ABEBC6'     # светлый зеленый
+            object_color = '#F9E79F'     # светлый желтый
+            initial_color = '#F5B7B1'    # светлый красный
+            final_color = '#D5D8DC'      # серый
             
-            # Add state nodes
+            # Добавляем узлы состояний
             for state_id, state in self.states.items():
                 if state.state_type == StateType.INITIAL:
                     color = initial_color
-                    shape = 's'
                 elif state.state_type == StateType.FINAL:
                     color = final_color
-                    shape = 's'
                 else:
                     color = state_color
-                    shape = 's'
+                
+                # Формируем подпись с состоянием объектов
+                obj_lines = []
+                for obj_name, obj_props in state.objects_state.items():
+                    props = ", ".join(f"{k}={v}" for k, v in obj_props.items())
+                    obj_lines.append(f"{obj_name}: {props}")
+                obj_text = "\n".join(obj_lines[:3])  # не более 3 строк
+                label = f"{state.name}\n{state.description[:20]}\n{obj_text}" if obj_text else f"{state.name}\n{state.description[:20]}"
                 
                 G.add_node(f"state_{state_id}", 
-                          label=f"{state.name}\n{state.description[:20]}",
+                          label=label,
                           type='state',
-                          color=color,
-                          shape=shape)
+                          color=color)
             
-            # Add action nodes
+            # Добавляем узлы действий
             for action_id, action in self.actions.items():
                 G.add_node(f"action_{action_id}",
                           label=f"{action.name[:30]}",
                           type='action',
-                          color=action_color,
-                          shape='diamond')
+                          color=action_color)
             
-            # Add object nodes
-            for obj_name, obj in self.objects.items():
-                props = []
-                for k, v in obj.properties.items():
-                    props.append(f"{k}={v}")
-                props_str = '\n'.join(props[:3])
-                label = f"{obj_name}\n{props_str}" if props_str else obj_name
+            # Добавляем узлы объектов (только имена)
+            for obj_name in self.objects.keys():
                 G.add_node(f"object_{obj_name}",
-                          label=label,
+                          label=obj_name,
                           type='object',
-                          color=object_color,
-                          shape='ellipse')
+                          color=object_color)
             
-            # Add edges: state -> action -> state
+            # Добавляем ребра: состояние -> действие -> состояние
             for (from_state, action_id), to_state in self.transitions.items():
                 action = self.actions.get(action_id)
                 if action:
-                    G.add_edge(f"state_{from_state}", f"action_{action_id}", label="trigger")
-                    G.add_edge(f"action_{action_id}", f"state_{to_state}", label="result")
+                    G.add_edge(f"state_{from_state}", f"action_{action_id}")
+                    G.add_edge(f"action_{action_id}", f"state_{to_state}")
             
-            # Add object participation edges
+            # Добавляем связи объектов с действиями (required)
             for action_id, action in self.actions.items():
                 for obj_name in action.required_objects:
-                    G.add_edge(f"object_{obj_name}", f"action_{action_id}", 
-                              label="required", style='dashed')
-                for obj_name in action.consumed_objects:
-                    G.add_edge(f"object_{obj_name}", f"action_{action_id}", 
-                              label="consumed", style='dotted', color='red')
-                for obj_name in action.produced_objects:
-                    G.add_edge(f"action_{action_id}", f"object_{obj_name}", 
-                              label="produced", style='dotted', color='green')
+                    G.add_edge(f"object_{obj_name}", f"action_{action_id}", style='dashed')
             
-            # Setup plot
+            # Настройка отображения
             plt.figure(figsize=(16, 12))
             
-            # Layout
-            pos = nx.spring_layout(G, k=1.5, iterations=50, seed=42)
-            
-            # Separate layout by node type for better visualization
-            pos_adjusted = {}
+            # Позиционирование узлов
+            pos = {}
             state_count = 0
             action_count = 0
             object_count = 0
             
+            # Располагаем состояния слева, действия в центре, объекты справа
             for node, data in G.nodes(data=True):
                 node_type = data.get('type', 'state')
                 if node_type == 'state':
-                    pos_adjusted[node] = (-2, state_count * 2 - 5)
+                    pos[node] = (-3, state_count * 1.5 - 4)
                     state_count += 1
                 elif node_type == 'action':
-                    pos_adjusted[node] = (0, action_count * 2 - 5)
+                    pos[node] = (0, action_count * 1.5 - 4)
                     action_count += 1
                 else:
-                    pos_adjusted[node] = (2, object_count * 2 - 5)
+                    pos[node] = (3, object_count * 1.5 - 4)
                     object_count += 1
             
-            # Draw nodes by type
-            for node_type, color, shape in [
-                ('state', 'lightblue', 's'),
-                ('action', 'lightgreen', 'D'),
-                ('object', 'lightyellow', 'o')
-            ]:
+            # Рисуем узлы по типам
+            for node_type, color in [('state', state_color), ('action', action_color), ('object', object_color)]:
                 nodes = [n for n, d in G.nodes(data=True) if d.get('type') == node_type]
                 if nodes:
-                    nx.draw_networkx_nodes(G, pos_adjusted, nodelist=nodes,
-                                         node_color=color, node_size=2000,
-                                         node_shape=shape, alpha=0.8)
+                    nx.draw_networkx_nodes(G, pos, nodelist=nodes,
+                                         node_color=color, node_size=2500,
+                                         alpha=0.9)
             
-            # Draw edges
-            edge_colors = []
-            for u, v, data in G.edges(data=True):
-                label = data.get('label', '')
-                if label == 'trigger':
-                    edge_colors.append('blue')
-                elif label == 'result':
-                    edge_colors.append('green')
-                elif label == 'required':
-                    edge_colors.append('gray')
-                else:
-                    edge_colors.append('black')
-            
-            nx.draw_networkx_edges(G, pos_adjusted, edge_color=edge_colors,
+            # Рисуем ребра
+            nx.draw_networkx_edges(G, pos, edge_color='gray',
                                  arrows=True, arrowsize=15, arrowstyle='->',
                                  connectionstyle='arc3,rad=0.1', alpha=0.6)
             
-            # Draw labels
+            # Рисуем подписи
             labels = nx.get_node_attributes(G, 'label')
-            nx.draw_networkx_labels(G, pos_adjusted, labels, font_size=8, font_weight='bold')
+            nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight='bold')
             
-            # Draw edge labels
-            edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True) if d.get('label')}
-            nx.draw_networkx_edge_labels(G, pos_adjusted, edge_labels, font_size=7)
-            
-            # Legend
-            from matplotlib.patches import Patch, FancyBboxPatch
+            # Легенда
+            from matplotlib.patches import Patch
             legend_elements = [
-                Patch(facecolor='lightblue', alpha=0.8, label='States'),
-                Patch(facecolor='lightgreen', alpha=0.8, label='Actions'),
-                Patch(facecolor='lightyellow', alpha=0.8, label='Objects'),
-                Patch(facecolor='lightcoral', alpha=0.8, label='Initial State'),
-                Patch(facecolor='lightgray', alpha=0.8, label='Final State')
+                Patch(facecolor=state_color, alpha=0.8, label='Состояния'),
+                Patch(facecolor=action_color, alpha=0.8, label='Действия'),
+                Patch(facecolor=object_color, alpha=0.8, label='Объекты'),
+                Patch(facecolor=initial_color, alpha=0.8, label='Начальное состояние'),
+                Patch(facecolor=final_color, alpha=0.8, label='Конечное состояние')
             ]
             plt.legend(handles=legend_elements, loc='upper right', fontsize=10)
             
-            plt.title(f"Instruction Graph: {self.name}\n(States, Actions, and Objects as separate nodes)", 
+            plt.title(f"Граф инструкций: {self.name}\n(Состояния, действия и объекты как отдельные узлы)", 
                      fontsize=14, fontweight='bold')
             plt.axis('off')
             plt.tight_layout()
             plt.savefig(f"{filename}.png", dpi=300, bbox_inches='tight')
-            print(f"[INFO] Graph saved as {filename}.png")
+            print(f"[ИНФО] Граф сохранен как {filename}.png")
             plt.show()
         except Exception as e:
-            print(f"[WARNING] Visualization failed: {e}")
+            print(f"[ПРЕДУПРЕЖДЕНИЕ] Визуализация не удалась: {e}")
     
     def print_ascii_graph(self) -> None:
         print("\n" + "="*70)
-        print(f"INSTRUCTION GRAPH: {self.name}")
+        print(f"ГРАФ ИНСТРУКЦИЙ: {self.name}")
         print("="*70)
         
-        print("\n[STATES]")
+        print("\n[СОСТОЯНИЯ]")
         for state_id, state in self.states.items():
             type_marker = {
-                StateType.INITIAL: "(S)",
-                StateType.FINAL: "(F)",
-                StateType.ERROR: "(E)",
+                StateType.INITIAL: "(НАЧ)",
+                StateType.FINAL: "(КОН)",
+                StateType.ERROR: "(ОШИБ)",
                 StateType.INTERMEDIATE: "(-)"
             }.get(state.state_type, "(-)")
-            current_marker = " <- CURRENT" if state_id == self.current_state_id else ""
+            current_marker = " <- ТЕКУЩЕЕ" if state_id == self.current_state_id else ""
             print(f"   {type_marker} {state.name} [{state_id}]: {state.description}{current_marker}")
+            
+            # Показываем состояние объектов
+            if state.objects_state:
+                for obj_name, obj_props in state.objects_state.items():
+                    props_str = ", ".join(f"{k}={v}" for k, v in obj_props.items())
+                    print(f"        - {obj_name}: {props_str}")
         
-        print("\n[ACTIONS]")
+        print("\n[ДЕЙСТВИЯ]")
         for action_id, action in self.actions.items():
             print(f"   [-] {action.name} [{action_id}]: {action.description}")
+            if action.required_objects:
+                print(f"        Требует: {', '.join(action.required_objects)}")
         
-        print("\n[TRANSITIONS]")
+        print("\n[ПЕРЕХОДЫ]")
         for (from_state, action_id), to_state in self.transitions.items():
             action = self.actions.get(action_id)
             from_state_name = self.states[from_state].name
@@ -659,9 +655,9 @@ class InstructionGraph:
             action_name = action.name if action else action_id
             print(f"   {from_state_name} -> [{action_name}] -> {to_state_name}")
         
-        print("\n[OBJECTS]")
-        for obj in self.objects.values():
-            print(f"   - {obj}")
+        print("\n[ОБЪЕКТЫ]")
+        for obj_name in self.objects.keys():
+            print(f"   - {obj_name}")
         
         print("="*70)
 
@@ -671,87 +667,92 @@ def main():
     import os
     
     print("=" * 70)
-    print("INSTRUCTION GRAPH LOADER (Petri Net + State Diagram)")
+    print("ЗАГРУЗЧИК ГРАФА ИНСТРУКЦИЙ (Сеть Петри + Диаграмма состояний)")
     print("=" * 70)
     
     if len(sys.argv) > 1:
         json_file = sys.argv[1]
     else:
-        json_file = input("\nEnter path to JSON instruction file (default: coffee_linear.json): ").strip()
+        json_file = input("\nВведите путь к JSON файлу с инструкцией (по умолчанию: coffee_linear.json): ").strip()
         if not json_file:
             json_file = "coffee_linear.json"
     
     if not os.path.exists(json_file):
-        print(f"\n[ERROR] File {json_file} not found!")
-        print("   Please create the configuration file or check the path.")
+        print(f"\n[ОШИБКА] Файл {json_file} не найден!")
+        print("   Создайте файл конфигурации или проверьте путь.")
         return
     
     try:
-        print(f"\nLoading graph from {json_file}...")
+        print(f"\nЗагрузка графа из {json_file}...")
         graph = InstructionGraph.from_json(json_file)
-        print("[OK] Graph loaded successfully!")
+        print("[УСПЕХ] Граф успешно загружен!")
     except Exception as e:
-        print(f"[ERROR] Failed to load JSON: {e}")
+        print(f"[ОШИБКА] Не удалось загрузить JSON: {e}")
         return
     
-    print(f"\n[GRAPH INFO]")
-    print(f"   Name: {graph.name}")
-    print(f"   States: {len(graph.states)}")
-    print(f"   Actions: {len(graph.actions)}")
-    print(f"   Objects: {len(graph.objects)}")
-    print(f"   Transitions: {len(graph.transitions)}")
+    print(f"\n[ИНФОРМАЦИЯ О ГРАФЕ]")
+    print(f"   Название: {graph.name}")
+    print(f"   Состояний: {len(graph.states)}")
+    print(f"   Действий: {len(graph.actions)}")
+    print(f"   Объектов: {len(graph.objects)}")
+    print(f"   Переходов: {len(graph.transitions)}")
     
     graph.print_ascii_graph()
     
     print("\n" + "="*70)
-    print("CHOOSE MODE:")
+    print("ВЫБЕРИТЕ РЕЖИМ РАБОТЫ:")
     print("="*70)
-    print("   1. Interactive step-by-step mode (manual control)")
-    print("   2. Show graph information")
-    print("   3. Visualize graph (states, actions, objects as separate nodes)")
-    print("   0. Exit")
+    print("   1. Интерактивный пошаговый режим (ручное управление)")
+    print("   2. Показать информацию о графе")
+    print("   3. Визуализировать граф (состояния, действия, объекты)")
+    print("   0. Выход")
     print("="*70)
     
-    choice = input("\nYour choice (0-3): ").strip()
+    choice = input("\nВаш выбор (0-3): ").strip()
     
     if choice == '1':
-        print("\nStarting step-by-step mode...")
-        input("Press Enter to begin...")
+        print("\nЗапуск пошагового режима...")
+        input("Нажмите Enter для начала...")
         graph.step_by_step_mode()
         
-        print("\n[FINAL STATISTICS]")
+        print("\n[ИТОГОВАЯ СТАТИСТИКА]")
         graph.print_statistics()
-        print("\n[FULL HISTORY]")
+        print("\n[ПОЛНАЯ ИСТОРИЯ]")
         graph.show_history()
         
     elif choice == '2':
-        print("\n[DETAILED INFORMATION]")
+        print("\n[ДЕТАЛЬНАЯ ИНФОРМАЦИЯ]")
         graph.print_statistics()
         
     elif choice == '3':
-        print("\nVisualizing graph...")
+        print("\nВизуализация графа...")
         graph.visualize("loaded_graph")
-        print("[OK] Graph visualization complete!")
+        print("[УСПЕХ] Визуализация графа завершена!")
         
     elif choice == '0':
-        print("\nGoodbye!")
+        print("\nДо свидания!")
         return
     
     else:
-        print("\n[ERROR] Invalid choice!")
+        print("\n[ОШИБКА] Неверный выбор!")
     
     result_file = json_file.replace('.json', '_result.json')
-    print(f"\nSaving results to {result_file}...")
+    print(f"\nСохранение результатов в {result_file}...")
+    
+    # Сохраняем финальное состояние объектов
+    final_objects_state = graph.get_current_objects_state()
+    
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump({
             'execution_history': graph.execution_history,
-            'final_state': graph.current_state_id,
-            'objects_state': {name: obj.properties for name, obj in graph.objects.items()}
+            'final_state_id': graph.current_state_id,
+            'final_state_name': graph.states[graph.current_state_id].name if graph.current_state_id else None,
+            'final_objects_state': final_objects_state
         }, f, indent=2, ensure_ascii=False)
-    print("[OK] Results saved!")
+    print("[УСПЕХ] Результаты сохранены!")
     
     print("\n" + "="*70)
-    print("Program finished")
+    print("Программа завершена")
     print("="*70)
 
 
