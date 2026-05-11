@@ -6,12 +6,13 @@ import json
 
 from models import Object, State, Action, StateType
 from conditions import compile_conditions
+from labels import LabelManager
 
 
 class InstructionGraph:
     """Гибридный граф инструкций (Сеть Петри + Диаграмма состояний)"""
     
-    def __init__(self, name: str = "InstructionGraph"):
+    def __init__(self, name: str = "InstructionGraph", label_manager: Optional[LabelManager] = None):
         self.name = name
         self.states: Dict[str, State] = {}
         self.actions: Dict[str, Action] = {}
@@ -19,14 +20,15 @@ class InstructionGraph:
         self.transitions: Dict[tuple, str] = {}
         self.current_state_id: Optional[str] = None
         self.execution_history: List[tuple] = []
+        self.label_manager = label_manager or LabelManager()
         
     @classmethod
-    def from_json(cls, json_file: str):
+    def from_json(cls, json_file: str, label_manager: Optional[LabelManager] = None):
         """Загрузка графа из JSON файла"""
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        graph = cls(data.get('name', 'InstructionGraph'))
+        graph = cls(data.get('name', 'InstructionGraph'), label_manager)
         
         # Загружаем объекты
         for obj_data in data.get('objects', []):
@@ -163,6 +165,10 @@ class InstructionGraph:
                     print(f"     Потреблено: {', '.join(action.consumed_objects)}")
                 if action.produced_objects:
                     print(f"     Создано: {', '.join(action.produced_objects)}")
+                
+                # Показываем рекомендации для выполненного действия
+                if self.label_manager:
+                    self.label_manager.display_recommendations(action.name, action.description)
             
             return True
             
@@ -276,6 +282,13 @@ class InstructionGraph:
             print(f"   [-] {action.name} [{action_id}]: {action.description}")
             if action.required_objects:
                 print(f"        Требует: {', '.join(action.required_objects)}")
+            
+            # Показываем метки для действия
+            if self.label_manager:
+                labels = self.label_manager.get_labels_for_action(action.name, action.description)
+                if labels:
+                    label_names = [label.name for label in labels]
+                    print(f"        Метки: {', '.join(label_names)}")
         
         print("\n[ПЕРЕХОДЫ]")
         for (from_state, action_id), to_state in self.transitions.items():

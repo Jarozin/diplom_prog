@@ -7,6 +7,7 @@ import json
 from models import StateType
 from graph import InstructionGraph
 from visualization import visualize_graph
+from labels import LabelManager
 
 
 def step_by_step_mode(graph: InstructionGraph):
@@ -53,12 +54,20 @@ def step_by_step_mode(graph: InstructionGraph):
             next_state = graph.states[next_state_id]
             action_name = action.name[:48] + "..." if len(action.name) > 48 else action.name
             print(f"   | {idx:2} | {action_name:<48} | {next_state.name:<21} |")
+            
+            # Показываем метки для действия (кратко)
+            if graph.label_manager:
+                labels = graph.label_manager.get_labels_for_action(action.name, action.description)
+                if labels:
+                    label_names = [label.name for label in labels]
+                    print(f"   |    | (метки: {', '.join(label_names)}){' ' * (48 - len(', '.join(label_names)) - 10)} |                       |")
         
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Выход                                            | -                     |")
         print("   | q  | Показать историю                                 | -                     |")
         print("   | s  | Показать статистику                              | -                     |")
         print("   | v  | Визуализировать граф                             | -                     |")
+        print("   | r  | Показать рекомендации для действия               | -                     |")
         print("   +----+--------------------------------------------------+-----------------------+")
         
         choice = input("\nВаш выбор: ").strip().lower()
@@ -74,6 +83,24 @@ def step_by_step_mode(graph: InstructionGraph):
             continue
         elif choice == 'v':
             visualize_graph(graph, "step_visualization")
+            continue
+        elif choice == 'r':
+            if available_actions:
+                print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ ДЛЯ РЕКОМЕНДАЦИЙ]")
+                for idx, (action, _) in enumerate(available_actions, 1):
+                    print(f"   {idx}. {action.name}")
+                try:
+                    action_choice = int(input("Номер действия: "))
+                    if 1 <= action_choice <= len(available_actions):
+                        action, _ = available_actions[action_choice - 1]
+                        if graph.label_manager:
+                            graph.label_manager.display_recommendations(action.name, action.description)
+                    else:
+                        print("[ОШИБКА] Неверный номер!")
+                except ValueError:
+                    print("[ОШИБКА] Неверный ввод!")
+            else:
+                print("[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий!")
             continue
         
         try:
@@ -109,6 +136,10 @@ def main():
     print("ЗАГРУЗЧИК ГРАФА ИНСТРУКЦИЙ (Сеть Петри + Диаграмма состояний)")
     print("=" * 70)
     
+    # Загружаем менеджер меток
+    labels_config = "labels_config.json"
+    label_manager = LabelManager(labels_config)
+    
     if len(sys.argv) > 1:
         json_file = sys.argv[1]
     else:
@@ -123,7 +154,7 @@ def main():
     
     try:
         print(f"\nЗагрузка графа из {json_file}...")
-        graph = InstructionGraph.from_json(json_file)
+        graph = InstructionGraph.from_json(json_file, label_manager)
         print("[УСПЕХ] Граф успешно загружен!")
     except Exception as e:
         print(f"[ОШИБКА] Не удалось загрузить JSON: {e}")
@@ -144,10 +175,11 @@ def main():
     print("   1. Интерактивный пошаговый режим (ручное управление)")
     print("   2. Показать информацию о графе")
     print("   3. Визуализировать граф (состояния, действия, объекты)")
+    print("   4. Показать все метки и рекомендации")
     print("   0. Выход")
     print("="*70)
     
-    choice = input("\nВаш выбор (0-3): ").strip()
+    choice = input("\nВаш выбор (0-4): ").strip()
     
     if choice == '1':
         print("\nЗапуск пошагового режима...")
@@ -167,6 +199,17 @@ def main():
         print("\nВизуализация графа...")
         visualize_graph(graph, "loaded_graph")
         print("[УСПЕХ] Визуализация графа завершена!")
+    
+    elif choice == '4':
+        print("\n[ВСЕ МЕТКИ И РЕКОМЕНДАЦИИ]")
+        print("="*70)
+        for label in label_manager.labels:
+            print(f"\nМетка: {label.name}")
+            print(f"   Ключевые слова: {', '.join(label.keywords)}")
+            print(f"   Рекомендации:")
+            for i, rec in enumerate(label.recommendations, 1):
+                print(f"      {i}. {rec}")
+        print("\n" + "="*70)
         
     elif choice == '0':
         print("\nДо свидания!")

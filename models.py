@@ -113,3 +113,19 @@ class Action:
             postcondition(context)
         
         return context
+
+
+@dataclass
+class Label:
+    """Метка с рекомендациями"""
+    name: str
+    keywords: List[str]
+    recommendations: List[str]
+    
+    def matches(self, text: str) -> bool:
+        """Проверяет, соответствует ли текст метке"""
+        text_lower = text.lower()
+        for keyword in self.keywords:
+            if keyword.lower() in text_lower:
+                return True
+        return False
