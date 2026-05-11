@@ -1,0 +1,22 @@
+// CoffeeMachine
+digraph {
+	rankdir=TB size="8,5"
+	s1 [label="Idle
+Машина ожидает" fillcolor=green shape=circle style=filled]
+	s2 [label="Heating
+Нагрев воды" fillcolor=lightblue shape=circle style=filled]
+	s3 [label="Grinding
+Измельчение зерен" fillcolor=lightblue shape=circle style=filled]
+	s4 [label="Brewing
+Приготовление кофе" fillcolor=lightblue shape=circle style=filled]
+	s5 [label="Ready
+Кофе готов" fillcolor=red shape=doublecircle style=filled]
+	s6 [label="Error
+Ошибка" fillcolor=orange shape=circle style=filled]
+	s1 -> s2 [label="Heat Water" fontsize=10]
+	s1 -> s3 [label="Grind Beans" fontsize=10]
+	s2 -> s4 [label="Brew Coffee" fontsize=10]
+	s3 -> s4 [label="Brew Coffee" fontsize=10]
+	s4 -> s5 [label="Brew Coffee" fontsize=10]
+	s1 -> s6 [label=Error fontsize=10]
+}
