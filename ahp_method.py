@@ -217,23 +217,32 @@ class AHPRecommendationRanker:
         self.load_criteria_config(criteria_config_file)
     
     def load_criteria_config(self, config_file: str) -> None:
-        """Загрузка конфигурации критериев и парных сравнений"""
+        """Загрузка конфигурации критериев и парных сравнений с поддержкой calculated_weights"""
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             self.criteria_names = [c['name'] for c in data.get('criteria', [])]
             
-            # Загружаем парные сравнения
+            # Если есть предвычисленные веса, используем их
+            if 'calculated_weights' in data:
+                weights = data['calculated_weights']
+                self.criteria_ahp.weights = {k: float(v) for k, v in weights.items()}
+                # Для совместимости можно также заполнить матрицу, но не обязательно
+                # Флаг is_consistent устанавливаем в True, так как веса уже нормализованы
+                self.criteria_ahp.is_consistent = True
+                self.criteria_ahp.criteria_names = self.criteria_names
+                print(f"[ИНФО] Загружены готовые веса критериев из {config_file}")
+                return
+            
+            # Иначе загружаем парные сравнения и вычисляем веса
             comparisons_raw = data.get('pairwise_comparisons', {})
             comparisons = {}
-            
             for key, value in comparisons_raw.items():
                 if '_vs_' in key:
                     crit1, crit2 = key.split('_vs_')
                     comparisons[(crit1, crit2)] = value
             
-            # Создаем матрицу парных сравнений и вычисляем веса через геометрическое среднее
             if comparisons and len(self.criteria_names) > 1:
                 self.criteria_ahp.create_pairwise_matrix(self.criteria_names, comparisons)
                 self.criteria_ahp.calculate_weights()

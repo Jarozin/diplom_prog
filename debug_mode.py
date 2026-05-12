@@ -540,44 +540,54 @@ class DebugMode:
         print(f"   - {log_file}")
     
     def _save_criteria_weights_to_file(self, filename):
-        """Сохранить веса критериев в файл"""
+        """Сохранить веса критериев в файл, идентичный исходному формату"""
         weights = self.label_manager.ranker.criteria_ahp.weights
-        weights_float = {k: float(v) for k, v in weights.items()}
+        criteria_names = list(weights.keys())
+        
+        # Восстанавливаем парные сравнения как отношения весов:
+        # a_ij = w_i / w_j, округлённое до шкалы 1..9 или обратных значений
+        pairwise = {}
+        for i, name_i in enumerate(criteria_names):
+            for j, name_j in enumerate(criteria_names):
+                if i >= j:
+                    continue
+                ratio = weights[name_i] / weights[name_j]
+                # Приводим к шкале Саати (1..9)
+                if ratio >= 1:
+                    value = min(9, round(ratio))
+                else:
+                    value = 1.0 / min(9, round(1.0 / ratio))
+                pairwise[f"{name_i}_vs_{name_j}"] = value
         
         data = {
-            "criteria": [{"name": name} for name in weights.keys()],
-            "pairwise_comparisons": {},
-            "calculated_weights": weights_float,
-            "note": "This file was generated from debug mode"
+            "criteria": [{"name": name} for name in criteria_names],
+            "pairwise_comparisons": pairwise,
+            "calculated_weights": {k: float(v) for k, v in weights.items()},
+            "note": "Generated from debug mode. Use 'calculated_weights' for direct loading."
         }
         
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     
     def _save_labels_to_file(self, filename):
-        """Сохранить измененные метки и рекомендации в файл"""
-        # Собираем все метки и их рекомендации с текущими оценками
+        """Сохранить изменённые метки и рекомендации в файл, идентичный исходному"""
         labels_data = []
-        
         for label in self.label_manager.labels:
-            label_data = {
-                "name": label.name,
-                "keywords": label.keywords,
-                "recommendations": []
-            }
-            
+            rec_list = []
             for rec in label.recommendations:
-                rec_data = {
+                rec_list.append({
                     "text": rec['text'],
                     "scores": {k: float(v) for k, v in rec.get('scores', {}).items()}
-                }
-                label_data["recommendations"].append(rec_data)
-            
-            labels_data.append(label_data)
+                })
+            labels_data.append({
+                "name": label.name,
+                "keywords": label.keywords,
+                "recommendations": rec_list
+            })
         
         data = {
             "labels": labels_data,
-            "note": "This file was generated from debug mode"
+            "note": "Generated from debug mode"
         }
         
         with open(filename, 'w', encoding='utf-8') as f:

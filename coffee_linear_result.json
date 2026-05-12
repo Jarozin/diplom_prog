@@ -1,37 +1,11 @@
 {
-  "execution_history": [
-    {
-      "from_state": "s0",
-      "from_state_name": "Начало",
-      "action_id": "a1",
-      "action_name": "НалитьВодуВЧайник",
-      "to_state": "s1",
-      "to_state_name": "ВодаНалитаВЧайник",
-      "recommendations": [
-        {
-          "text": "Будьте предельно осторожны с горячей посудой и жидкостями!",
-          "score": 0.0839968882654041,
-          "rank": 1
-        },
-        {
-          "text": "Не включайте пустой прибор.",
-          "score": 0.08031000796388034,
-          "rank": 2
-        },
-        {
-          "text": "Держите детей и домашних животных подальше от кухни.",
-          "score": 0.07990123198670006,
-          "rank": 3
-        }
-      ]
-    }
-  ],
+  "execution_history": [],
   "total_steps": 0,
-  "final_state_id": "s1",
-  "final_state_name": "ВодаНалитаВЧайник",
+  "final_state_id": "s0",
+  "final_state_name": "Начало",
   "final_objects_state": {
     "чайник": {
-      "содержит_воду": true,
+      "содержит_воду": false,
       "вода_вскипячена": false
     },
     "кружка": {
