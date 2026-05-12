@@ -104,7 +104,8 @@ class AHPMethod:
         total = sum(geometric_means)
         weights = [gm / total for gm in geometric_means]
         
-        self.weights = {name: weights[i] for i, name in enumerate(self.criteria_names)}
+        # Преобразуем в обычные float
+        self.weights = {name: float(weights[i]) for i, name in enumerate(self.criteria_names)}
         return self.weights
     
     def calculate_consistency(self) -> Tuple[float, float, bool]:
@@ -123,17 +124,17 @@ class AHPMethod:
         
         # 1. Вычисляем λ_max (главное собственное значение)
         #  λ_max = (1/n) * ∑ ( (A * w)_i / w_i )
-        
-        lambda_max = np.sum(self.pairwise_matrix.sum(axis=0) * weights_array)
+        aw = self.pairwise_matrix @ weights_array
+        lambda_max = np.mean(aw / weights_array)
         
         # 2. Индекс согласованности (Consistency Index)
         #    CI = (λ_max - n) / (n - 1)
-        self.consistency_index = (lambda_max - n) / (n - 1) if n > 1 else 0
+        self.consistency_index = float((lambda_max - n) / (n - 1) if n > 1 else 0)
         
         # 3. Отношение согласованности (Consistency Ratio)
         #    CR = CI / RI
         ri = self.RANDOM_INDICES.get(n, 1.59)
-        self.consistency_ratio = self.consistency_index / ri if ri > 0 else 0
+        self.consistency_ratio = float(self.consistency_index / ri if ri > 0 else 0)
         
         # 4. Проверка согласованности
         self.is_consistent = self.consistency_ratio < 0.1
@@ -162,7 +163,7 @@ class AHPMethod:
                 score = scores.get(criterion, 0.0)
                 global_priority += weight * score
             
-            results.append((alt_name, global_priority))
+            results.append((alt_name, float(global_priority)))
         
         results.sort(key=lambda x: x[1], reverse=True)
         return results
@@ -183,7 +184,7 @@ class AHPMethod:
             print(f"{name[:12]:<12}", end="")
             for j in range(len(self.criteria_names)):
                 value = self.pairwise_matrix[i][j]
-                print(f"{value:12.3f}", end="")
+                print(f"{float(value):12.3f}", end="")
             print()
     
     def display_results(self) -> None:
@@ -194,12 +195,10 @@ class AHPMethod:
         
         print("\n[ВЕСА КРИТЕРИЕВ (геометрическое среднее)]")
         for name, weight in sorted(self.weights.items(), key=lambda x: x[1], reverse=True):
-            print(f"   {name}: {weight:.1%}")
+            print(f"   {name}: {weight:.4f} ({weight:.1%})")
         
         print(f"\n[ПРОВЕРКА СОГЛАСОВАННОСТИ]")
-        print(f"   λ_max: {self._get_lambda_max():.4f}")
         print(f"   Индекс согласованности (ИС): {self.consistency_index:.4f}")
-        print(f"   Случайный индекс (СИ): {self.RANDOM_INDICES.get(len(self.criteria_names), 1.59):.4f}")
         print(f"   Отношение согласованности (ОС): {self.consistency_ratio:.2%}")
         
         if self.is_consistent:
@@ -209,15 +208,6 @@ class AHPMethod:
             print("   Рекомендуется пересмотреть парные сравнения")
         
         self.display_matrix()
-    
-    def _get_lambda_max(self) -> float:
-        """Вычисление λ_max для вывода"""
-        if self.pairwise_matrix is None:
-            return 0.0
-        n = len(self.criteria_names)
-        weights_array = np.array(list(self.weights.values()))
-        aw = self.pairwise_matrix @ weights_array
-        return np.mean(aw / weights_array)
 
 
 class AHPRecommendationRanker:
@@ -300,7 +290,7 @@ class AHPRecommendationRanker:
         for criterion, weight in self.criteria_ahp.weights.items():
             score = scores.get(criterion, 0.0)
             total += weight * score
-        return total
+        return float(total)
     
     def rank_recommendations(self, recommendations: List[Dict]) -> List[Tuple[Dict, float]]:
         """
@@ -313,6 +303,9 @@ class AHPRecommendationRanker:
             список кортежей (рекомендация, оценка), отсортированный по убыванию
             Оценки нормализованы так, что их сумма = 1
         """
+        if not recommendations:
+            return []
+        
         # 1. Вычисляем сырые оценки
         raw_scores = []
         for rec in recommendations:
@@ -320,16 +313,14 @@ class AHPRecommendationRanker:
             raw_scores.append(score)
         
         # 2. Нормализуем, чтобы сумма = 1
-        total = sum(raw_scores)
-        if total > 0:
-            normalized_scores = [score / total for score in raw_scores]
+        total_raw = sum(raw_scores)
+        if total_raw > 0:
+            normalized_scores = [score / total_raw for score in raw_scores]
         else:
-            normalized_scores = [1.0 / len(raw_scores) for _ in raw_scores]  # равномерное распределение
+            normalized_scores = [1.0 / len(recommendations) for _ in recommendations]
         
         # 3. Формируем результат
-        ranked = []
-        for rec, norm_score in zip(recommendations, normalized_scores):
-            ranked.append((rec, norm_score))
+        ranked = list(zip(recommendations, [float(s) for s in normalized_scores]))
         
         # 4. Сортируем по убыванию
         ranked.sort(key=lambda x: x[1], reverse=True)
@@ -353,7 +344,7 @@ class AHPRecommendationRanker:
         for i, (rec, score) in enumerate(ranked[:top_n], 1):
             top_recommendations.append({
                 'text': rec['text'],
-                'score': score,
+                'score': float(score),
                 'rank': i
             })
         
@@ -378,7 +369,7 @@ class AHPRecommendationRanker:
         print("   " + "-"*55)
         for rec in top_recs:
             print(f"      {rec['rank']}. {rec['text']}")
-            print(f"         (оценка: {rec['score']:.3f})")
+            print(f"         (оценка: {rec['score']:.4f})")
         print("   " + "-"*55)
     
     def display_criteria_info(self) -> None:
