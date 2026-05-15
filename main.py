@@ -17,6 +17,55 @@ os.makedirs(DEBUG_DIR, exist_ok=True)
 os.makedirs(EMERGENCY_DIR, exist_ok=True)
 
 
+def get_graph_description(filepath):
+    """Извлекает описание графа из JSON-файла или возвращает имя файла."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('description', os.path.basename(filepath))
+    except:
+        return os.path.basename(filepath)
+
+
+def select_graph_file():
+    """Предлагает пользователю выбрать файл графа из папки graph или ввести вручную."""
+    graph_files = [f for f in os.listdir(GRAPH_DIR) if f.endswith('.json')]
+    if not graph_files:
+        print("\n[ПРЕДУПРЕЖДЕНИЕ] В папке graph нет JSON-файлов. Будет предложен ручной ввод.")
+        manual = input("Введите путь к JSON-файлу: ").strip()
+        if os.path.exists(manual):
+            return manual
+        else:
+            print("[ОШИБКА] Файл не найден")
+            return None
+    
+    print("\nДоступные графы инструкций:")
+    for i, fname in enumerate(graph_files, 1):
+        full_path = os.path.join(GRAPH_DIR, fname)
+        desc = get_graph_description(full_path)
+        print(f"   {i}. {fname} – {desc}")
+    print(f"   {len(graph_files)+1}. Ввести имя файла вручную")
+    
+    choice = input(f"\nВыберите номер (1-{len(graph_files)+1}): ").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(graph_files):
+            return os.path.join(GRAPH_DIR, graph_files[idx])
+        elif idx == len(graph_files):
+            manual = input("Введите путь к JSON-файлу: ").strip()
+            if os.path.exists(manual):
+                return manual
+            else:
+                print("[ОШИБКА] Файл не найден")
+                return None
+        else:
+            print("[ОШИБКА] Неверный номер")
+            return None
+    except ValueError:
+        print("[ОШИБКА] Введите число")
+        return None
+
+
 def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json_file: str):
     print("\n" + "="*70)
     print("ИНТЕРАКТИВНЫЙ ПОШАГОВЫЙ РЕЖИМ")
@@ -57,7 +106,8 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                 if lab:
                     labs = ", ".join([l.name for l in lab])
                     ls = f"метки: {labs}"
-                    if len(ls) > 48: ls = ls[:45]+"..."
+                    if len(ls) > 48:
+                        ls = ls[:45]+"..."
                     print(f"   |    | ({ls:<46}) |                       |")
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Завершить и сохранить результаты                 | -                     |")
@@ -87,7 +137,7 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
         elif choice == 'i':
             if available:
                 print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ]")
-                for idx, (act, _) in enumerate(available,1):
+                for idx, (act, _) in enumerate(available, 1):
                     print(f"   {idx}. {act.name}")
                 try:
                     a_choice = int(input("Номер: "))
@@ -103,6 +153,7 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                 except ValueError:
                     print("[ОШИБКА] Введите число")
             continue
+
         try:
             idx = int(choice)
             if 1 <= idx <= len(available):
@@ -142,7 +193,6 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                                     return_to_original = emergency_handler.run_emergency_scenario(sc_id)
                                     if return_to_original:
                                         print("Возврат к основному рецепту.")
-                                        # Продолжаем основной цикл
                                     else:
                                         print("Аварийный сценарий завершён. Возврат в главное меню.")
                                         return
@@ -159,16 +209,22 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                 print("[ОШИБКА] Неверный номер")
         except ValueError:
             print("[ОШИБКА] Неверная команда")
+
     if steps >= max_steps:
         print(f"\n[ПРЕДУПРЕЖДЕНИЕ] Максимум шагов {max_steps}")
     print(f"\nПошаговый режим завершён. Шагов: {steps}")
+
+    # Сохранение результатов
     base = os.path.basename(json_file)
     out_file = os.path.join(RESULT_DIR, base.replace('.json', '_result.json'))
     with open(out_file, 'w', encoding='utf-8') as f:
         history = [{
-            'from_state': h.from_state, 'from_state_name': h.from_state_name,
-            'action_id': h.action_id, 'action_name': h.action_name,
-            'to_state': h.to_state, 'to_state_name': h.to_state_name,
+            'from_state': h.from_state,
+            'from_state_name': h.from_state_name,
+            'action_id': h.action_id,
+            'action_name': h.action_name,
+            'to_state': h.to_state,
+            'to_state_name': h.to_state_name,
             'recommendations': h.recommendations
         } for h in graph.execution_history]
         json.dump({
@@ -237,19 +293,10 @@ def main():
         print("ЗАГРУЗЧИК ГРАФА ИНСТРУКЦИЙ")
         print("="*70)
         if json_file is None:
-            if len(sys.argv) > 1:
-                inp = sys.argv[1]
-            else:
-                inp = input("\nВведите имя файла из папки graph: ").strip()
-                if not inp: inp = "coffee_gourmet.json"
-            p = os.path.join(GRAPH_DIR, inp)
-            if os.path.exists(p):
-                json_file = p
-            elif os.path.exists(inp):
-                json_file = inp
-            else:
-                print(f"[ОШИБКА] Файл {inp} не найден")
+            json_file = select_graph_file()
+            if json_file is None:
                 continue
+        
         try:
             graph = InstructionGraph.from_json(json_file, label_manager)
             print("[УСПЕХ] Граф загружен")
@@ -257,6 +304,7 @@ def main():
             print(f"[ОШИБКА] {e}")
             json_file = None
             continue
+        
         graph.print_ascii_graph()
         while True:
             print("\n"+"="*70)
@@ -302,8 +350,11 @@ def main():
                 dm.run()
                 print("Возврат в главное меню")
             elif choice == '7':
-                json_file = None
-                break
+                json_file = select_graph_file()
+                if json_file is None:
+                    print("Загрузка нового графа отменена, остаюсь в текущем.")
+                else:
+                    break  # выходим из внутреннего цикла для перезагрузки
             elif choice == '8':
                 if reset_graph_state(graph, json_file, label_manager):
                     graph.print_ascii_graph()
