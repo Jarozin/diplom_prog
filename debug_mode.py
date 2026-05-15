@@ -1,20 +1,13 @@
-"""Режим дебага для эксперта - настройка весов МАИ и оценок рекомендаций"""
-
-import json
-import copy
-import os
-from typing import Dict, List, Tuple, Any
+import json, copy, os
 from datetime import datetime
+from typing import Dict, List, Tuple
 
-# Определение пути для сохранения дебаг-файлов
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEBUG_DIR = os.path.join(BASE_DIR, "debug")
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
 
 class DebugMode:
-    """Режим дебага для экспертной настройки системы"""
-    
     def __init__(self, graph, label_manager):
         self.graph = graph
         self.label_manager = label_manager
@@ -23,566 +16,302 @@ class DebugMode:
         self.changes_log = []
         self.debug_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    def _format_float(self, value):
-        """Форматирование float для вывода (убираем np.float64)"""
-        if hasattr(value, 'item'):
-            return f"{value.item():.4f}"
-        return f"{float(value):.4f}"
-    
-    def _format_weights(self, weights):
-        """Форматирование словаря весов для вывода"""
-        return {k: float(v) for k, v in weights.items()}
+    def _get_current_comparison(self, c1, c2):
+        idx1 = self.label_manager.ranker.criteria_ahp.criteria_names.index(c1)
+        idx2 = self.label_manager.ranker.criteria_ahp.criteria_names.index(c2)
+        return self.label_manager.ranker.criteria_ahp.pairwise_matrix[idx1, idx2]
     
     def run(self):
-        """Запуск режима дебага"""
         print("\n" + "="*70)
         print("РЕЖИМ ДЕБАГА ДЛЯ ЭКСПЕРТА")
         print("="*70)
-        print("\nВ этом режиме вы можете:")
-        print("   1. Просматривать текущие веса критериев МАИ")
-        print("   2. Изменять веса критериев")
-        print("   3. Просматривать и изменять оценки рекомендаций для действий")
-        print("   4. Пошагово выполнять инструкцию с отладкой")
-        print("   5. Сохранять изменения в новый файл")
-        print("\n" + "="*70)
-        
-        # Сохраняем оригинальные значения
         self._save_original_state()
-        
         while True:
-            print("\n[МЕНЮ РЕЖИМА ДЕБАГА]")
-            print("   1. Показать текущие веса критериев МАИ")
-            print("   2. Изменить веса критериев МАИ")
-            print("   3. Показать все действия и их рекомендации с оценками")
-            print("   4. Изменить оценки рекомендаций для действия")
-            print("   5. Запустить пошаговое выполнение с отладкой")
-            print("   6. Показать историю изменений")
-            print("   7. Сохранить изменения в новый файл")
-            print("   8. Сбросить к оригинальным настройкам")
-            print("   0. Выход из режима дебага")
-            
-            choice = input("\nВаш выбор: ").strip()
-            
-            if choice == '1':
-                self._show_criteria_weights()
-            elif choice == '2':
-                self._edit_criteria_weights()
-            elif choice == '3':
-                self._show_all_actions_with_scores()
-            elif choice == '4':
-                self._edit_action_recommendations()
-            elif choice == '5':
-                self._debug_step_by_step()
-            elif choice == '6':
-                self._show_changes_log()
-            elif choice == '7':
-                self._save_changes_to_file()
-            elif choice == '8':
-                self._reset_to_original()
-            elif choice == '0':
-                print("\nВозврат в главное меню...")
+            print("\n[МЕНЮ ДЕБАГА]")
+            print("   1. Показать текущие веса")
+            print("   2. Изменить веса через парные сравнения")
+            print("   3. Показать все рекомендации с оценками")
+            print("   4. Изменить оценки рекомендаций")
+            print("   5. Пошаговое выполнение с отладкой")
+            print("   6. История изменений")
+            print("   7. Сохранить изменения в файлы")
+            print("   8. Сбросить к оригиналу")
+            print("   0. Выход")
+            ch = input("Ваш выбор: ").strip()
+            if ch == '0':
                 break
+            elif ch == '1':
+                self._show_criteria_weights()
+            elif ch == '2':
+                self._edit_pairwise()
+            elif ch == '3':
+                self._show_all_recommendations()
+            elif ch == '4':
+                self._edit_action_recommendations()
+            elif ch == '5':
+                self._debug_step_by_step()
+            elif ch == '6':
+                self._show_changes_log()
+            elif ch == '7':
+                self._save_changes_to_file()
+            elif ch == '8':
+                self._reset_to_original()
             else:
-                print("[ОШИБКА] Неверный выбор!")
+                print("Неверный выбор")
     
     def _save_original_state(self):
-        """Сохранение оригинального состояния"""
-        # Сохраняем веса критериев
-        weights = self.label_manager.ranker.criteria_ahp.weights
-        self.original_weights = {k: float(v) for k, v in weights.items()}
-        
-        # Сохраняем оценки рекомендаций для всех действий
+        self.original_weights = copy.deepcopy(self.label_manager.ranker.criteria_ahp.weights)
         self.original_scores = {}
-        for action_id, action in self.graph.actions.items():
-            recommendations = self.label_manager.get_recommendations_for_action(action)
-            self.original_scores[action_id] = []
-            for rec in recommendations:
-                self.original_scores[action_id].append({
-                    'text': rec['text'],
-                    'scores': copy.deepcopy(rec.get('scores', {}))
-                })
+        for aid, act in self.graph.actions.items():
+            recs = self.label_manager.get_recommendations_for_action(act)
+            self.original_scores[aid] = copy.deepcopy(recs)
     
     def _show_criteria_weights(self):
-        """Показать текущие веса критериев"""
-        print("\n" + "="*60)
-        print("ТЕКУЩИЕ ВЕСА КРИТЕРИЕВ МАИ")
-        print("="*60)
-        
-        weights = self.label_manager.ranker.criteria_ahp.weights
-        total = sum(weights.values())
-        
-        print("\n[ВЕСА]")
-        for name, weight in sorted(weights.items(), key=lambda x: x[1], reverse=True):
-            print(f"   {name}: {float(weight):.4f} ({float(weight):.1%})")
-        
-        print(f"\n   Сумма весов: {float(total):.4f}")
-        
-        # Показываем проверку согласованности
-        print("\n[ПРОВЕРКА СОГЛАСОВАННОСТИ]")
+        w = self.label_manager.ranker.criteria_ahp.weights
+        print("\n=== ВЕСА КРИТЕРИЕВ ===")
+        for k, v in w.items():
+            print(f"   {k}: {v:.4f} ({v:.1%})")
         cr = self.label_manager.ranker.criteria_ahp.consistency_ratio
-        print(f"   Отношение согласованности (ОС): {float(cr):.2%}")
-        if self.label_manager.ranker.criteria_ahp.is_consistent:
-            print("   Статус: СОГЛАСОВАНА (ОС < 10%)")
-        else:
-            print("   Статус: НЕ СОГЛАСОВАНА (ОС >= 10%) - рекомендуется пересмотреть сравнения")
+        print(f"Согласованность: ОС={cr:.2%}")
     
-    def _edit_criteria_weights(self):
-        """Редактирование весов критериев"""
-        print("\n" + "="*60)
-        print("ИЗМЕНЕНИЕ ВЕСОВ КРИТЕРИЕВ МАИ")
-        print("="*60)
-        
-        current_weights = {k: float(v) for k, v in self.label_manager.ranker.criteria_ahp.weights.items()}
-        
-        print("\nТекущие веса (сумма должна быть 1.0):")
-        for name, weight in current_weights.items():
-            print(f"   {name}: {weight:.4f}")
-        
-        print("\nВведите новые веса (сумма должна быть 1.0):")
-        new_weights = {}
-        total = 0
-        
-        for name in current_weights.keys():
-            while True:
-                try:
-                    value = input(f"   {name} (текущий {current_weights[name]:.4f}): ").strip()
-                    if not value:
-                        value = current_weights[name]
-                    else:
-                        value = float(value)
-                    new_weights[name] = value
-                    total += value
-                    break
-                except ValueError:
-                    print("   Ошибка! Введите число.")
-        
-        print(f"\nСумма введенных весов: {total:.4f}")
-        
-        if abs(total - 1.0) > 0.001:
-            print("Сумма весов не равна 1.0. Нормализовать? (y/n): ")
-            normalize = input().strip().lower()
-            if normalize == 'y':
-                for name in new_weights:
-                    new_weights[name] /= total
-                print("Веса нормализованы.")
-        
-        # Сохраняем старые веса для лога
-        old_weights = current_weights.copy()
-        
-        # Применяем новые веса
-        self.label_manager.ranker.criteria_ahp.weights = new_weights
-        
-        # Записываем изменение в лог
+    def _edit_pairwise(self):
+        ahp = self.label_manager.ranker.criteria_ahp
+        crits = ahp.criteria_names
+        n = len(crits)
+        print("\n=== РЕДАКТИРОВАНИЕ ПАРНЫХ СРАВНЕНИЙ ===")
+        print("Введите числа от 1 до 9. Если A важнее B – число >1, иначе <1.")
+        comparisons = {}
+        for i in range(n):
+            for j in range(i+1, n):
+                cur = self._get_current_comparison(crits[i], crits[j])
+                while True:
+                    try:
+                        val = input(f"{crits[i]} vs {crits[j]} (текущее {cur:.1f}): ").strip()
+                        if not val:
+                            val = cur
+                        else:
+                            val = float(val)
+                        comparisons[(crits[i], crits[j])] = val
+                        break
+                    except ValueError:
+                        print("Ошибка, введите число")
+        ahp.create_pairwise_matrix(crits, comparisons)
+        ahp.calculate_weights()
+        ahp.calculate_consistency()
         self.changes_log.append({
             'timestamp': datetime.now().isoformat(),
-            'type': 'criteria_weights',
-            'old_values': old_weights,
-            'new_values': new_weights.copy()
+            'type': 'pairwise_edit',
+            'new_comparisons': {f"{c1}_vs_{c2}": v for (c1,c2), v in comparisons.items()}
         })
-        
-        print("\n[УСПЕХ] Веса критериев обновлены!")
-        
-        # Показываем изменения
-        print("\n[ИЗМЕНЕНИЯ]")
-        for name in old_weights:
-            old_val = old_weights[name]
-            new_val = new_weights[name]
-            if abs(old_val - new_val) > 0.001:
-                print(f"   {name}: {old_val:.4f} -> {new_val:.4f} ({((new_val - old_val) * 100):+.1f}%)")
-            else:
-                print(f"   {name}: {old_val:.4f} (без изменений)")
-        
+        print("Веса пересчитаны.")
         self._show_criteria_weights()
     
-    def _show_all_actions_with_scores(self):
-        """Показать все действия и их рекомендации с оценками"""
-        print("\n" + "="*70)
-        print("ВСЕ ДЕЙСТВИЯ И ИХ РЕКОМЕНДАЦИИ С ОЦЕНКАМИ")
-        print("="*70)
-        
-        for action_id, action in self.graph.actions.items():
-            print(f"\n[ДЕЙСТВИЕ] {action.name} (id: {action_id})")
-            print(f"   Описание: {action.description}")
-            
-            recommendations = self.label_manager.get_recommendations_for_action(action)
-            if not recommendations:
-                print("   (нет рекомендаций для этого действия)")
+    def _show_all_recommendations(self):
+        for aid, act in self.graph.actions.items():
+            print(f"\n[ДЕЙСТВИЕ] {act.name}")
+            recs = self.label_manager.get_recommendations_for_action(act)
+            if not recs:
+                print("   нет рекомендаций")
                 continue
-            
-            print(f"   Рекомендации ({len(recommendations)}):")
-            for i, rec in enumerate(recommendations, 1):
-                print(f"      {i}. {rec['text']}")
-                scores = rec.get('scores', {})
-                if scores:
-                    print(f"         Оценки по критериям:")
-                    for criterion, score in scores.items():
-                        print(f"            {criterion}: {float(score):.2f}")
-                else:
-                    print("         (нет оценок по критериям)")
+            for i, r in enumerate(recs,1):
+                print(f"   {i}. {r['text']}")
+                for crit, sc in r.get('scores', {}).items():
+                    print(f"      {crit}: {sc:.2f}")
     
     def _edit_action_recommendations(self):
-        """Редактирование оценок рекомендаций для действия"""
-        print("\n" + "="*60)
-        print("ИЗМЕНЕНИЕ ОЦЕНОК РЕКОМЕНДАЦИЙ")
-        print("="*60)
-        
-        # Показываем список действий
-        actions_list = list(self.graph.actions.values())
-        print("\nВыберите действие:")
-        for i, action in enumerate(actions_list, 1):
-            print(f"   {i}. {action.name}")
-        
+        acts = list(self.graph.actions.values())
+        print("Выберите действие:")
+        for i, a in enumerate(acts,1):
+            print(f"   {i}. {a.name}")
         try:
-            choice = int(input("\nНомер действия: ")) - 1
-            if 0 <= choice < len(actions_list):
-                action = actions_list[choice]
-                self._edit_single_action_recommendations(action)
-            else:
-                print("[ОШИБКА] Неверный номер!")
-        except ValueError:
-            print("[ОШИБКА] Введите число!")
-    
-    def _edit_single_action_recommendations(self, action):
-        """Редактирование рекомендаций для конкретного действия"""
-        print(f"\n[РЕДАКТИРОВАНИЕ] Действие: {action.name}")
-        
-        recommendations = self.label_manager.get_recommendations_for_action(action)
-        if not recommendations:
-            print("Нет рекомендаций для редактирования.")
-            return
-        
-        # Показываем рекомендации
-        print("\nРекомендации:")
-        criteria_names = list(self.label_manager.ranker.criteria_ahp.weights.keys())
-        
-        for i, rec in enumerate(recommendations, 1):
-            print(f"\n   {i}. {rec['text']}")
-            scores = rec.get('scores', {})
-            for criterion in criteria_names:
-                current_score = scores.get(criterion, 0.5)
-                print(f"      {criterion}: {float(current_score):.2f}")
-        
-        # Выбираем рекомендацию для редактирования
-        try:
-            rec_choice = int(input("\nВыберите номер рекомендации для редактирования (0 - выход): "))
-            if rec_choice == 0:
+            idx = int(input("Номер: ")) - 1
+            if idx < 0 or idx >= len(acts):
+                print("Неверный номер")
                 return
-            if 1 <= rec_choice <= len(recommendations):
-                rec_index = rec_choice - 1
-                rec = recommendations[rec_index]
-                
-                # Сохраняем оригинальные оценки до изменения
-                old_scores = copy.deepcopy(rec.get('scores', {}))
-                
-                print(f"\nРедактирование: {rec['text']}")
-                print("Введите новые оценки по критериям (0-1):")
-                
-                new_scores = {}
-                for criterion in criteria_names:
-                    current = old_scores.get(criterion, 0.5)
-                    while True:
-                        try:
-                            value = input(f"   {criterion} (текущий {float(current):.2f}): ").strip()
-                            if not value:
-                                value = current
-                            else:
-                                value = float(value)
-                                if value < 0:
-                                    value = 0
-                                elif value > 1:
-                                    value = 1
-                            new_scores[criterion] = value
-                            break
-                        except ValueError:
-                            print("   Ошибка! Введите число.")
-                
-                # Обновляем scores в оригинальных данных
-                self._update_recommendation_scores(action, rec['text'], new_scores)
-                
-                # Записываем изменение в лог с сохранением старых оценок
-                rec_text_short = rec['text'][:80] + "..." if len(rec['text']) > 80 else rec['text']
-                self.changes_log.append({
-                    'timestamp': datetime.now().isoformat(),
-                    'type': 'recommendation_scores',
-                    'action': action.name,
-                    'recommendation': rec_text_short,
-                    'old_scores': {k: float(v) for k, v in old_scores.items()},
-                    'new_scores': {k: float(v) for k, v in new_scores.items()}
-                })
-                
-                print("\n[УСПЕХ] Оценки обновлены!")
-                
-                # Показываем изменения для наглядности
-                print("\n[ИЗМЕНЕНИЯ]")
-                has_changes = False
-                for criterion in criteria_names:
-                    old_val = old_scores.get(criterion, 0.5)
-                    new_val = new_scores.get(criterion, 0.5)
-                    if abs(old_val - new_val) > 0.001:
-                        print(f"   {criterion}: {float(old_val):.2f} -> {float(new_val):.2f} ({((new_val - old_val) * 100):+.1f}%)")
-                        has_changes = True
-                    else:
-                        print(f"   {criterion}: {float(old_val):.2f} (без изменений)")
-                
-                if not has_changes:
-                    print("   (изменений не было)")
-            else:
-                print("[ОШИБКА] Неверный номер!")
-        except ValueError:
-            print("[ОШИБКА] Введите число!")
-    
-    def _update_recommendation_scores(self, action, recommendation_text, new_scores):
-        """Обновление оценок рекомендации в label_manager"""
-        labels = self.label_manager.get_labels_for_action(action)
-        for label in labels:
-            for rec in label.recommendations:
-                if rec['text'] == recommendation_text:
-                    if 'scores' not in rec:
-                        rec['scores'] = {}
-                    rec['scores'] = new_scores
-                    break
+            action = acts[idx]
+            recs = self.label_manager.get_recommendations_for_action(action)
+            if not recs:
+                print("Нет рекомендаций")
+                return
+            print("\nРекомендации:")
+            for i, r in enumerate(recs,1):
+                print(f"{i}. {r['text']}")
+            r_idx = int(input("Номер рекомендации для изменения (0 - выход): ")) - 1
+            if r_idx < 0 or r_idx >= len(recs):
+                return
+            rec = recs[r_idx]
+            scores = rec.get('scores', {})
+            new_scores = {}
+            crits = self.label_manager.ranker.criteria_ahp.weights.keys()
+            print("Введите новые оценки (0-1):")
+            for c in crits:
+                old = scores.get(c, 0.5)
+                while True:
+                    try:
+                        v = input(f"   {c} (текущий {old:.2f}): ").strip()
+                        if not v:
+                            v = old
+                        else:
+                            v = float(v)
+                            v = max(0, min(1, v))
+                        new_scores[c] = v
+                        break
+                    except ValueError:
+                        print("Ошибка")
+            # обновляем scores в label_manager
+            labels = self.label_manager.get_labels_for_action(action)
+            for lbl in labels:
+                for r in lbl.recommendations:
+                    if r['text'] == rec['text']:
+                        r['scores'] = new_scores
+                        break
+            self.changes_log.append({
+                'timestamp': datetime.now().isoformat(),
+                'type': 'rec_scores',
+                'action': action.name,
+                'recommendation': rec['text'],
+                'old_scores': scores,
+                'new_scores': new_scores
+            })
+            print("Оценки обновлены")
+        except Exception as e:
+            print(f"Ошибка: {e}")
     
     def _debug_step_by_step(self):
-        """Пошаговое выполнение с отладкой"""
-        print("\n" + "="*70)
-        print("ПОШАГОВОЕ ВЫПОЛНЕНИЕ С ОТЛАДКОЙ")
-        print("="*70)
-        
-        debug_graph = self.graph
+        print("\n=== ПОШАГОВОЕ ВЫПОЛНЕНИЕ С ОТЛАДКОЙ ===")
+        # используем текущий граф
         steps = 0
-        max_steps = 100
-        
-        while steps < max_steps:
-            current_state = debug_graph.states[debug_graph.current_state_id]
-            print("\n" + "-"*70)
-            print(f"[ТЕКУЩЕЕ СОСТОЯНИЕ] {current_state.name}")
-            print(f"   Описание: {current_state.description}")
-            print(f"   Тип: {current_state.state_type.to_rus()}")
-            
-            if current_state.objects_state:
-                print("\n   Состояние объектов:")
-                formatted = debug_graph.format_objects_state(current_state.objects_state)
-                print(formatted)
-            
-            if current_state.state_type.value in ["final", "error"]:
-                print(f"\n{'[ДОСТИГНУТО КОНЕЧНОЕ СОСТОЯНИЕ]' if current_state.state_type.value == 'final' else '[ДОСТИГНУТО СОСТОЯНИЕ ОШИБКИ]'}")
+        while True:
+            cur = self.graph.states[self.graph.current_state_id]
+            print(f"\n[{cur.name}]")
+            avail = self.graph.get_available_actions()
+            if not avail:
+                print("Нет доступных действий")
                 break
-            
-            available_actions = debug_graph.get_available_actions()
-            if not available_actions:
-                print("\n[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий!")
+            for i, (act,_) in enumerate(avail,1):
+                print(f"{i}. {act.name}")
+            print("0 - выход")
+            ch = input("Выберите действие или d для деталей: ").strip()
+            if ch == '0':
                 break
-            
-            print(f"\n[ДОСТУПНЫЕ ДЕЙСТВИЯ]")
-            for idx, (action, next_state_id) in enumerate(available_actions, 1):
-                next_state = debug_graph.states[next_state_id]
-                print(f"   {idx}. {action.name} -> {next_state.name}")
-            
-            print("\n[ОТЛАДОЧНАЯ ИНФОРМАЦИЯ]")
-            print("   d - показать детальную информацию о действии")
-            print("   w - показать текущие веса критериев")
-            print("   e - редактировать веса критериев")
-            print("   r - редактировать оценки рекомендаций")
-            
-            choice = input("\nВаш выбор (номер действия или команда): ").strip().lower()
-            
-            if choice == 'd':
-                self._show_action_debug_info(available_actions)
+            if ch == 'd':
+                self._show_action_debug_info(avail)
                 continue
-            elif choice == 'w':
-                self._show_criteria_weights()
-                continue
-            elif choice == 'e':
-                self._edit_criteria_weights()
-                continue
-            elif choice == 'r':
-                self._edit_action_recommendations()
-                continue
-            
             try:
-                idx = int(choice)
-                if 1 <= idx <= len(available_actions):
-                    action, next_state_id = available_actions[idx - 1]
-                    self._show_action_debug_info([(action, next_state_id)])
-                    print(f"\nВыполнить действие: {action.name}?")
-                    confirm = input("   Подтвердить (y/n): ").strip().lower()
-                    if confirm == 'y':
-                        top_recs = self.label_manager.get_top_recommendations_for_action(action, top_n=3)
-                        print(f"\nВыполняется: {action.name}...")
-                        success = debug_graph.execute_action(action.id, recommendations=top_recs)
-                        if success:
-                            steps += 1
+                idx = int(ch)-1
+                if 0 <= idx < len(avail):
+                    act, _ = avail[idx]
+                    # показать детали
+                    self._show_action_debug_info([(act, None)])
+                    conf = input(f"Выполнить {act.name}? (y/n): ").strip().lower()
+                    if conf == 'y':
+                        top = self.label_manager.get_top_recommendations_for_action(act, 3)
+                        self.graph.execute_action(act.id, recommendations=top)
+                        steps += 1
                     else:
-                        print("   Действие отменено.")
+                        print("Отменено")
                 else:
-                    print("[ОШИБКА] Неверный номер!")
+                    print("Неверный номер")
             except ValueError:
-                print("[ОШИБКА] Неверная команда!")
-        
-        print("\n" + "="*70)
-        print(f"Отладочное выполнение завершено. Выполнено шагов: {steps}")
-        print("="*70)
+                print("Ошибка")
+        print(f"Выполнено шагов: {steps}")
     
     def _show_action_debug_info(self, actions):
-        """Показать отладочную информацию о действиях"""
-        weights = self.label_manager.ranker.criteria_ahp.weights
-        weights_float = {k: float(v) for k, v in weights.items()}
-        
-        for action, _ in actions:
-            print(f"\n[ОТЛАДКА] Действие: {action.name}")
-            print(f"   Описание: {action.description}")
-            labels = self.label_manager.get_labels_for_action(action)
-            if labels:
-                print(f"   Метки: {', '.join([l.name for l in labels])}")
-            print(f"\n   Веса критериев:")
-            for crit, w in weights_float.items():
-                print(f"      {crit}: {w:.4f}")
-            recommendations = self.label_manager.get_recommendations_for_action(action)
-            if recommendations:
-                print(f"\n   Рекомендации с расчетом оценок (МАИ):")
-                ranked = self.label_manager.ranker.rank_recommendations(recommendations)
-                for rec, score in ranked:
-                    print(f"\n      Рекомендация: {rec['text']}")
-                    print(f"      Итоговая оценка: {float(score):.4f}")
-                    scores = rec.get('scores', {})
-                    if scores:
-                        print("      Оценки по критериям и вклад:")
-                        for criterion, crit_score in scores.items():
-                            contribution = weights_float.get(criterion, 0) * float(crit_score)
-                            print(f"         {criterion}: {float(crit_score):.2f} (вклад: {contribution:.4f})")
+        w = self.label_manager.ranker.criteria_ahp.weights
+        for act, _ in actions:
+            print(f"\n=== ОТЛАДКА: {act.name} ===")
+            print(f"Описание: {act.description}")
+            labs = self.label_manager.get_labels_for_action(act)
+            if labs:
+                print(f"Метки: {', '.join(l.name for l in labs)}")
+            recs = self.label_manager.get_recommendations_for_action(act)
+            if recs:
+                ranked = self.label_manager.ranker.rank_recommendations(recs)
+                print("Рекомендации с оценками:")
+                for r, s in ranked[:5]:
+                    print(f"   {r['text']} -> {s:.4f}")
+                    for crit, sc in r.get('scores', {}).items():
+                        contr = w.get(crit,0) * sc
+                        print(f"      {crit}: {sc:.2f} (вклад {contr:.4f})")
             else:
-                print("   (нет рекомендаций)")
+                print("Нет рекомендаций")
     
     def _show_changes_log(self):
-        """Показать историю изменений"""
-        print("\n" + "="*60)
-        print("ИСТОРИЯ ИЗМЕНЕНИЙ")
-        print("="*60)
-        if not self.changes_log:
-            print("Изменений не было.")
-            return
-        for i, change in enumerate(self.changes_log, 1):
-            print(f"\n{i}. {change['timestamp']}")
-            print(f"   Тип: {change['type']}")
-            if change['type'] == 'criteria_weights':
-                print("   Изменение весов критериев:")
-                print("      Было:")
-                for k, v in change['old_values'].items():
-                    print(f"         {k}: {v:.4f}")
-                print("      Стало:")
-                for k, v in change['new_values'].items():
-                    diff = v - change['old_values'].get(k, 0)
-                    print(f"         {k}: {v:.4f} ({diff:+.4f})")
-            elif change['type'] == 'recommendation_scores':
-                print(f"   Действие: {change['action']}")
-                print(f"   Рекомендация: {change['recommendation']}")
-                print("      Было:")
-                for k, v in change['old_scores'].items():
-                    print(f"         {k}: {v:.2f}")
-                print("      Стало:")
-                for k, v in change['new_scores'].items():
-                    old_v = change['old_scores'].get(k, 0.5)
-                    diff = v - old_v
-                    print(f"         {k}: {v:.2f} ({diff:+.2f})")
+        print("\n=== ИСТОРИЯ ИЗМЕНЕНИЙ ===")
+        for i, ch in enumerate(self.changes_log,1):
+            print(f"{i}. {ch['timestamp']} - {ch['type']}")
+            if ch['type'] == 'pairwise_edit':
+                for k,v in ch['new_comparisons'].items():
+                    print(f"   {k}: {v}")
+            elif ch['type'] == 'rec_scores':
+                print(f"   Действие: {ch['action']}")
+                print(f"   Рекомендация: {ch['recommendation'][:60]}")
+                print("   Было:", ch['old_scores'])
+                print("   Стало:", ch['new_scores'])
     
     def _save_criteria_weights_to_file(self, filename):
-        """Сохранить веса критериев в файл внутри папки debug"""
-        weights = self.label_manager.ranker.criteria_ahp.weights
-        criteria_names = list(weights.keys())
-        
-        pairwise = {}
-        for i, name_i in enumerate(criteria_names):
-            for j, name_j in enumerate(criteria_names):
-                if i >= j:
-                    continue
-                ratio = weights[name_i] / weights[name_j]
-                if ratio >= 1:
-                    value = min(9, round(ratio))
-                else:
-                    value = 1.0 / min(9, round(1.0 / ratio))
-                pairwise[f"{name_i}_vs_{name_j}"] = value
-        
+        ahp = self.label_manager.ranker.criteria_ahp
+        crits = ahp.criteria_names
+        # восстанавливаем парные сравнения из матрицы
+        comps = {}
+        for i in range(len(crits)):
+            for j in range(i+1, len(crits)):
+                val = ahp.pairwise_matrix[i,j]
+                comps[f"{crits[i]}_vs_{crits[j]}"] = round(val, 3)
         data = {
-            "criteria": [{"name": name} for name in criteria_names],
-            "pairwise_comparisons": pairwise,
-            "calculated_weights": {k: float(v) for k, v in weights.items()},
-            "note": "Generated from debug mode. Use 'calculated_weights' for direct loading."
+            "criteria": [{"name": c} for c in crits],
+            "pairwise_comparisons": comps,
+            "calculated_weights": {k: float(v) for k,v in ahp.weights.items()},
+            "note": "Generated from debug mode"
         }
-        
-        full_path = os.path.join(DEBUG_DIR, filename)
-        with open(full_path, 'w', encoding='utf-8') as f:
+        with open(os.path.join(DEBUG_DIR, filename), 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     
     def _save_labels_to_file(self, filename):
-        """Сохранить изменённые метки и рекомендации в папку debug"""
         labels_data = []
-        for label in self.label_manager.labels:
-            rec_list = []
-            for rec in label.recommendations:
-                rec_list.append({
-                    "text": rec['text'],
-                    "scores": {k: float(v) for k, v in rec.get('scores', {}).items()}
+        for lab in self.label_manager.labels:
+            recs = []
+            for r in lab.recommendations:
+                recs.append({
+                    "text": r['text'],
+                    "scores": {k: float(v) for k,v in r.get('scores',{}).items()}
                 })
             labels_data.append({
-                "name": label.name,
-                "keywords": label.keywords,
-                "recommendations": rec_list
+                "name": lab.name,
+                "keywords": lab.keywords,
+                "recommendations": recs
             })
-        
-        data = {
-            "labels": labels_data,
-            "note": "Generated from debug mode"
-        }
-        
-        full_path = os.path.join(DEBUG_DIR, filename)
-        with open(full_path, 'w', encoding='utf-8') as f:
+        data = {"labels": labels_data, "note": "Generated from debug mode"}
+        with open(os.path.join(DEBUG_DIR, filename), 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     
     def _save_changes_to_file(self):
-        """Сохранить изменения в новые файлы внутри папки debug"""
-        print("\n" + "="*60)
-        print("СОХРАНЕНИЕ ИЗМЕНЕНИЙ")
-        print("="*60)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        weights_file = f"ahp_criteria_config_debug_{timestamp}.json"
-        self._save_criteria_weights_to_file(weights_file)
-        
-        labels_file = f"labels_config_debug_{timestamp}.json"
-        self._save_labels_to_file(labels_file)
-        
-        log_file = f"debug_changes_{timestamp}.json"
-        weights_float = {k: float(v) for k, v in self.label_manager.ranker.criteria_ahp.weights.items()}
-        full_log_path = os.path.join(DEBUG_DIR, log_file)
-        with open(full_log_path, 'w', encoding='utf-8') as f:
-            json.dump({
-                'session_id': self.debug_session_id,
-                'timestamp': timestamp,
-                'changes': self.changes_log,
-                'final_weights': weights_float
-            }, f, indent=2, ensure_ascii=False)
-        
-        print(f"\n[УСПЕХ] Файлы сохранены в папку '{DEBUG_DIR}':")
-        print(f"   - {weights_file}")
-        print(f"   - {labels_file}")
-        print(f"   - {log_file}")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._save_criteria_weights_to_file(f"ahp_debug_{ts}.json")
+        self._save_labels_to_file(f"labels_debug_{ts}.json")
+        log = {
+            'session_id': self.debug_session_id,
+            'timestamp': ts,
+            'changes': self.changes_log,
+            'final_weights': {k:float(v) for k,v in self.label_manager.ranker.criteria_ahp.weights.items()}
+        }
+        with open(os.path.join(DEBUG_DIR, f"debug_log_{ts}.json"), 'w', encoding='utf-8') as f:
+            json.dump(log, f, indent=2, ensure_ascii=False)
+        print(f"[СОХРАНЕНО] файлы в {DEBUG_DIR}")
     
     def _reset_to_original(self):
-        """Сбросить к оригинальным настройкам"""
-        print("\nСбросить все изменения к оригинальным настройкам? (y/n): ")
-        confirm = input().strip().lower()
-        if confirm == 'y':
+        if input("Сбросить все изменения? (y/n): ").lower() == 'y':
             self.label_manager.ranker.criteria_ahp.weights = copy.deepcopy(self.original_weights)
-            for action_id, action in self.graph.actions.items():
-                if action_id in self.original_scores:
-                    labels = self.label_manager.get_labels_for_action(action)
-                    for label in labels:
-                        for rec in label.recommendations:
-                            for orig_rec in self.original_scores[action_id]:
-                                if rec['text'] == orig_rec['text']:
-                                    rec['scores'] = copy.deepcopy(orig_rec['scores'])
+            # восстановить оценки рекомендаций
+            for aid, act in self.graph.actions.items():
+                if aid in self.original_scores:
+                    orig = self.original_scores[aid]
+                    # обновить рекомендации в label_manager
+                    labels = self.label_manager.get_labels_for_action(act)
+                    for lbl in labels:
+                        for r in lbl.recommendations:
+                            for o in orig:
+                                if r['text'] == o['text']:
+                                    r['scores'] = copy.deepcopy(o['scores'])
             self.changes_log = []
-            print("\n[УСПЕХ] Настройки сброшены к оригинальным!")
-        else:
-            print("Сброс отменен.")
+            print("Сброс выполнен")
