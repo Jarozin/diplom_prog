@@ -1,0 +1,57 @@
+{
+  "name": "Ожог",
+  "objects": [
+    {"name": "вода", "type": "object"},
+    {"name": "аптечка", "type": "object"}
+  ],
+  "states": [
+    {
+      "id": "s0",
+      "name": "Ожог горячим",
+      "description": "Покраснение, боль, возможно волдырь.",
+      "type": "initial",
+      "objects_state": {
+        "вода": {"холодная": true},
+        "аптечка": {"доступна": true}
+      }
+    },
+    {
+      "id": "s1",
+      "name": "Ожог охлаждён",
+      "description": "Место ожога промыто холодной водой 10–15 минут.",
+      "type": "intermediate",
+      "objects_state": {
+        "вода": {"холодная": false},
+        "аптечка": {"доступна": true}
+      }
+    },
+    {
+      "id": "s2",
+      "name": "Повязка наложена",
+      "description": "Наложена стерильная повязка.",
+      "type": "final",
+      "objects_state": {
+        "вода": {"холодная": false},
+        "аптечка": {"доступна": false}
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "a1",
+      "name": "Охладить ожог",
+      "description": "Промыть холодной водой 10-15 минут",
+      "required_objects": ["вода"]
+    },
+    {
+      "id": "a2",
+      "name": "Наложить повязку",
+      "description": "Наложить стерильную повязку, не туго",
+      "required_objects": ["аптечка"]
+    }
+  ],
+  "transitions": [
+    {"from": "s0", "action": "a1", "to": "s1"},
+    {"from": "s1", "action": "a2", "to": "s2"}
+  ]
+}

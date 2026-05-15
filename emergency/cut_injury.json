@@ -1,0 +1,57 @@
+{
+  "name": "Порез",
+  "objects": [
+    {"name": "аптечка", "type": "object"},
+    {"name": "вода", "type": "object"}
+  ],
+  "states": [
+    {
+      "id": "s0",
+      "name": "Порез ножом",
+      "description": "Повреждена кожа, идёт кровь.",
+      "type": "initial",
+      "objects_state": {
+        "аптечка": {"доступна": true},
+        "вода": {"чистая": true}
+      }
+    },
+    {
+      "id": "s1",
+      "name": "Рану промыли",
+      "description": "Рана промыта, кровь остановлена.",
+      "type": "intermediate",
+      "objects_state": {
+        "аптечка": {"доступна": true},
+        "вода": {"чистая": false}
+      }
+    },
+    {
+      "id": "s2",
+      "name": "Наложен пластырь",
+      "description": "Рана закрыта бактерицидным пластырем.",
+      "type": "final",
+      "objects_state": {
+        "аптечка": {"доступна": true},
+        "вода": {"чистая": false}
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "a1",
+      "name": "Промыть рану",
+      "description": "Промыть порез чистой водой, остановить кровь",
+      "required_objects": ["вода"]
+    },
+    {
+      "id": "a2",
+      "name": "Наложить пластырь",
+      "description": "Наклеить бактерицидный пластырь или бинт",
+      "required_objects": ["аптечка"]
+    }
+  ],
+  "transitions": [
+    {"from": "s0", "action": "a1", "to": "s1"},
+    {"from": "s1", "action": "a2", "to": "s2"}
+  ]
+}

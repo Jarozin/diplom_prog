@@ -4,14 +4,17 @@ from graph import InstructionGraph
 from visualization import visualize_graph
 from labels import LabelManager
 from debug_mode import DebugMode
+from emergency import EmergencyHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GRAPH_DIR = os.path.join(BASE_DIR, "graph")
 RESULT_DIR = os.path.join(BASE_DIR, "result")
 DEBUG_DIR = os.path.join(BASE_DIR, "debug")
+EMERGENCY_DIR = os.path.join(BASE_DIR, "emergency")
 os.makedirs(GRAPH_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 os.makedirs(DEBUG_DIR, exist_ok=True)
+os.makedirs(EMERGENCY_DIR, exist_ok=True)
 
 
 def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json_file: str):
@@ -23,6 +26,8 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
         return
     steps = 0
     max_steps = 100
+    emergency_handler = EmergencyHandler(BASE_DIR, label_manager)
+
     while steps < max_steps:
         cur = graph.states[graph.current_state_id]
         print("\n" + "-"*70)
@@ -56,12 +61,13 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                     print(f"   |    | ({ls:<46}) |                       |")
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Завершить и сохранить результаты                 | -                     |")
-        print("   | i  | Информация о действии                            | -                     |")
+        print("   | i  | Информация о действие                            | -                     |")
         print("   | a  | Показать веса критериев                          | -                     |")
         print("   | q  | Показать историю                                 | -                     |")
         print("   | s  | Показать статистику                              | -                     |")
         print("   | v  | Визуализировать граф                             | -                     |")
         print("   +----+--------------------------------------------------+-----------------------+")
+
         choice = input("\nВаш выбор: ").strip().lower()
         if choice == '0':
             break
@@ -110,12 +116,45 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                             print(f"      {r['rank']}. {r['text']} (оценка: {r['score']:.3f})")
                             recs.append(r)
                 print(f"\nВыполнить {act.name}? (y/n): ")
-                if input().strip().lower() == 'y':
+                confirm = input().strip().lower()
+                if confirm == 'y':
                     print(f"\nВыполняется {act.name}...")
                     if graph.execute_action(act.id, recommendations=recs):
                         steps += 1
+                elif confirm == 'n':
+                    print("Возникла ли аварийная ситуация? (y/n): ")
+                    emergency = input().strip().lower()
+                    if emergency == 'y':
+                        scenarios = emergency_handler.get_emergency_scenarios_for_action(act)
+                        if not scenarios:
+                            print("Нет доступных аварийных сценариев для текущего контекста.")
+                            continue
+                        print("\nДоступные аварийные сценарии:")
+                        for i, (sc_id, desc, _) in enumerate(scenarios, 1):
+                            print(f"{i}. {desc}")
+                        print("0. Отмена")
+                        sc_choice = input("Выберите сценарий: ").strip()
+                        if sc_choice != '0':
+                            try:
+                                sc_idx = int(sc_choice) - 1
+                                if 0 <= sc_idx < len(scenarios):
+                                    sc_id, _, _ = scenarios[sc_idx]
+                                    return_to_original = emergency_handler.run_emergency_scenario(sc_id)
+                                    if return_to_original:
+                                        print("Возврат к основному рецепту.")
+                                        # Продолжаем цикл
+                                    else:
+                                        print("Аварийный сценарий завершён. Возврат в главное меню.")
+                                        return
+                                else:
+                                    print("Неверный выбор")
+                            except ValueError:
+                                print("Ошибка")
+                    else:
+                        print("Действие отменено, выберите другое действие.")
+                        continue
                 else:
-                    print("Отменено")
+                    print("Неверный ввод, действие не выполнено")
             else:
                 print("[ОШИБКА] Неверный номер")
         except ValueError:

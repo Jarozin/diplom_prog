@@ -1,0 +1,80 @@
+{
+  "spilled_water": {
+    "file": "spilled_water.json",
+    "description": "Пролил воду на стол / пол",
+    "return_to_original": true,
+    "tags": ["вода", "пролил", "чайник", "наливание_воды", "кастрюля", "налить воду"]
+  },
+  "overheat_kettle": {
+    "file": "overheat_kettle.json",
+    "description": "Чайник перегрелся, дымит",
+    "return_to_original": false,
+    "tags": ["кипячение", "чайник", "безопасность", "нагревание", "плита"]
+  },
+  "broken_cup": {
+    "file": "broken_cup.json",
+    "description": "Разбил кружку",
+    "return_to_original": true,
+    "tags": ["кружка", "посуда", "тарелка"]
+  },
+  "burnt_food": {
+    "file": "burnt_food.json",
+    "description": "Еда пригорела, дым",
+    "return_to_original": false,
+    "tags": ["жарка", "яйца", "сковорода", "масло", "безопасность"]
+  },
+  "lack_of_ingredients": {
+    "file": "lack_of_ingredients.json",
+    "description": "Не хватает ингредиентов (нет яиц, кофе и т.п.)",
+    "return_to_original": true,
+    "tags": ["яйца", "кофе", "фрукты", "сахар", "добавление_ингредиентов", "банка_кофе", "источник_яиц", "источник_фруктов"]
+  },
+  "cut_injury": {
+    "file": "cut_injury.json",
+    "description": "Порезался ножом при нарезке",
+    "return_to_original": true,
+    "tags": ["фрукты", "нарезать", "ножик", "подготовка_фруктов", "безопасность"]
+  },
+  "burn_injury": {
+    "file": "burn_injury.json",
+    "description": "Обжёгся горячей посудой или паром",
+    "return_to_original": true,
+    "tags": ["кипяток", "чайник", "кастрюля", "сковорода", "безопасность", "переливание", "кипячение"]
+  },
+  "electric_shock": {
+    "file": "electric_shock.json",
+    "description": "Удар током от прибора",
+    "return_to_original": false,
+    "tags": ["чайник", "плита", "электричество", "безопасность"]
+  },
+  "fire_on_stove": {
+    "file": "fire_on_stove.json",
+    "description": "Возгорание на плите (масло загорелось)",
+    "return_to_original": false,
+    "tags": ["плита", "масло", "сковорода", "жарка", "безопасность"]
+  },
+  "broken_glass": {
+    "file": "broken_glass.json",
+    "description": "Разбил стеклянную посуду (банка, чашка)",
+    "return_to_original": true,
+    "tags": ["банка_кофе", "кружка", "посуда"]
+  },
+  "water_boiled_over": {
+    "file": "water_boiled_over.json",
+    "description": "Вода выкипела, кастрюля сухая",
+    "return_to_original": false,
+    "tags": ["кипячение", "кастрюля", "плита", "безопасность"]
+  },
+  "pan_handle_burn": {
+    "file": "pan_handle_burn.json",
+    "description": "Ручка сковороды перегрелась, обжёгся",
+    "return_to_original": true,
+    "tags": ["сковорода", "жарка", "безопасность", "нагревание"]
+  },
+  "spilled_oil": {
+    "file": "spilled_oil.json",
+    "description": "Пролил масло на плиту",
+    "return_to_original": true,
+    "tags": ["масло", "сковорода", "плита", "безопасность", "добавление_масла"]
+  }
+}
