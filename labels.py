@@ -8,6 +8,7 @@ class LabelManager:
     def __init__(self, config_file: str = "labels_config.json", ahp_config_file: str = "ahp_criteria_config.json", profile: str = "опытный"):
         self.labels: List[Label] = []
         self.action_labels_cache: Dict[str, List[Label]] = {}
+        self.current_profile = profile
         self.ranker = AHPRecommendationRanker(ahp_config_file, profile)
         self.load_config(config_file)
     

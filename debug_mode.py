@@ -15,6 +15,10 @@ class DebugMode:
         self.original_scores = None
         self.changes_log = []
         self.debug_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.current_profile = self._get_current_profile_name()
+    
+    def _get_current_profile_name(self):
+        return getattr(self.label_manager, 'current_profile', 'опытный')
     
     def _get_current_comparison(self, c1, c2):
         idx1 = self.label_manager.ranker.criteria_ahp.criteria_names.index(c1)
@@ -23,7 +27,7 @@ class DebugMode:
     
     def run(self):
         print("\n" + "="*70)
-        print("РЕЖИМ ДЕБАГА ДЛЯ ЭКСПЕРТА")
+        print(f"РЕЖИМ ДЕБАГА ДЛЯ ЭКСПЕРТА (текущий профиль: {self.current_profile})")
         print("="*70)
         self._save_original_state()
         while True:
@@ -34,7 +38,7 @@ class DebugMode:
             print("   4. Изменить оценки рекомендаций")
             print("   5. Пошаговое выполнение с отладкой")
             print("   6. История изменений")
-            print("   7. Сохранить изменения в файлы")
+            print("   7. Сохранить изменения в файлы (для текущего профиля)")
             print("   8. Сбросить к оригиналу")
             print("   0. Выход")
             ch = input("Ваш выбор: ").strip()
@@ -158,7 +162,6 @@ class DebugMode:
                         break
                     except ValueError:
                         print("Ошибка")
-            # обновляем scores в label_manager
             labels = self.label_manager.get_labels_for_action(action)
             for lbl in labels:
                 for r in lbl.recommendations:
@@ -179,7 +182,6 @@ class DebugMode:
     
     def _debug_step_by_step(self):
         print("\n=== ПОШАГОВОЕ ВЫПОЛНЕНИЕ С ОТЛАДКОЙ ===")
-        # используем текущий граф
         steps = 0
         while True:
             cur = self.graph.states[self.graph.current_state_id]
@@ -201,7 +203,6 @@ class DebugMode:
                 idx = int(ch)-1
                 if 0 <= idx < len(avail):
                     act, _ = avail[idx]
-                    # показать детали
                     self._show_action_debug_info([(act, None)])
                     conf = input(f"Выполнить {act.name}? (y/n): ").strip().lower()
                     if conf == 'y':
@@ -252,7 +253,6 @@ class DebugMode:
     def _save_criteria_weights_to_file(self, filename):
         ahp = self.label_manager.ranker.criteria_ahp
         crits = ahp.criteria_names
-        # восстанавливаем парные сравнения из матрицы
         comps = {}
         for i in range(len(crits)):
             for j in range(i+1, len(crits)):
@@ -262,6 +262,7 @@ class DebugMode:
             "criteria": [{"name": c} for c in crits],
             "pairwise_comparisons": comps,
             "calculated_weights": {k: float(v) for k,v in ahp.weights.items()},
+            "profile": self.current_profile,
             "note": "Generated from debug mode"
         }
         with open(os.path.join(DEBUG_DIR, filename), 'w', encoding='utf-8') as f:
@@ -287,26 +288,29 @@ class DebugMode:
     
     def _save_changes_to_file(self):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._save_criteria_weights_to_file(f"ahp_debug_{ts}.json")
-        self._save_labels_to_file(f"labels_debug_{ts}.json")
+        profile_name = self.current_profile
+        weights_file = f"ahp_debug_{profile_name}_{ts}.json"
+        self._save_criteria_weights_to_file(weights_file)
+        labels_file = f"labels_debug_{profile_name}_{ts}.json"
+        self._save_labels_to_file(labels_file)
         log = {
             'session_id': self.debug_session_id,
             'timestamp': ts,
+            'profile': profile_name,
             'changes': self.changes_log,
             'final_weights': {k:float(v) for k,v in self.label_manager.ranker.criteria_ahp.weights.items()}
         }
-        with open(os.path.join(DEBUG_DIR, f"debug_log_{ts}.json"), 'w', encoding='utf-8') as f:
+        log_file = f"debug_log_{profile_name}_{ts}.json"
+        with open(os.path.join(DEBUG_DIR, log_file), 'w', encoding='utf-8') as f:
             json.dump(log, f, indent=2, ensure_ascii=False)
-        print(f"[СОХРАНЕНО] файлы в {DEBUG_DIR}")
+        print(f"[СОХРАНЕНО] файлы в {DEBUG_DIR} для профиля '{profile_name}'")
     
     def _reset_to_original(self):
         if input("Сбросить все изменения? (y/n): ").lower() == 'y':
             self.label_manager.ranker.criteria_ahp.weights = copy.deepcopy(self.original_weights)
-            # восстановить оценки рекомендаций
             for aid, act in self.graph.actions.items():
                 if aid in self.original_scores:
                     orig = self.original_scores[aid]
-                    # обновить рекомендации в label_manager
                     labels = self.label_manager.get_labels_for_action(act)
                     for lbl in labels:
                         for r in lbl.recommendations:

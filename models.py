@@ -1,12 +1,9 @@
-"""Модели данных для графа инструкций (без предусловий и постусловий)"""
-
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Optional, Any
 from enum import Enum
 
 
 class StateType(Enum):
-    """Типы состояний"""
     INITIAL = "initial"
     FINAL = "final"
     INTERMEDIATE = "intermediate"
@@ -34,9 +31,8 @@ class StateType(Enum):
 
 @dataclass
 class Object:
-    """Объект или субъект, участвующий в инструкциях"""
     name: str
-    obj_type: str = "object"  # "object" или "subject"
+    obj_type: str = "object"
     properties: Dict[str, Any] = field(default_factory=dict)
     
     def __hash__(self):
@@ -57,7 +53,6 @@ class Object:
 
 @dataclass
 class State:
-    """Состояние в графе инструкций"""
     id: str
     name: str
     description: str = ""
@@ -82,24 +77,21 @@ class State:
 
 @dataclass
 class Action:
-    """Действие, которое переводит из одного состояния в другое (без условий)"""
     id: str
     name: str
     description: str = ""
     required_objects: Set[str] = field(default_factory=set)
     produced_objects: Set[str] = field(default_factory=set)
     consumed_objects: Set[str] = field(default_factory=set)
-    # Поля preconditions/postconditions удалены
     execution_time: float = 1.0
     probability: float = 1.0
 
 
 @dataclass
 class Label:
-    """Метка с рекомендациями (только для действий)"""
     name: str
     keywords: List[str]
-    recommendations: List[Dict]  # Список словарей с полями 'text' и 'scores'
+    recommendations: List[Dict]
     
     def matches(self, text: str) -> bool:
         text_lower = text.lower()
@@ -113,7 +105,6 @@ class Label:
 
 @dataclass
 class HistoryStep:
-    """Шаг истории выполнения"""
     from_state: str
     from_state_name: str
     action_id: str

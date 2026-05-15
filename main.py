@@ -63,14 +63,22 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
         print("   | v  | Визуализировать граф                             | -                     |")
         print("   +----+--------------------------------------------------+-----------------------+")
         choice = input("\nВаш выбор: ").strip().lower()
-        if choice == '0': break
-        if choice == 'q': graph.show_history(); continue
-        if choice == 's': graph.print_statistics(); continue
-        if choice == 'v': visualize_graph(graph, "step_visualization"); continue
-        if choice == 'a':
-            if label_manager: label_manager.display_criteria_info()
+        if choice == '0':
+            break
+        elif choice == 'q':
+            graph.show_history()
             continue
-        if choice == 'i':
+        elif choice == 's':
+            graph.print_statistics()
+            continue
+        elif choice == 'v':
+            visualize_graph(graph, "step_visualization")
+            continue
+        elif choice == 'a':
+            if label_manager:
+                label_manager.display_criteria_info()
+            continue
+        elif choice == 'i':
             if available:
                 print("\n[ВЫБЕРИТЕ ДЕЙСТВИЕ]")
                 for idx, (act, _) in enumerate(available,1):
@@ -115,7 +123,6 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
     if steps >= max_steps:
         print(f"\n[ПРЕДУПРЕЖДЕНИЕ] Максимум шагов {max_steps}")
     print(f"\nПошаговый режим завершён. Шагов: {steps}")
-    # Сохранение результатов
     base = os.path.basename(json_file)
     out_file = os.path.join(RESULT_DIR, base.replace('.json', '_result.json'))
     with open(out_file, 'w', encoding='utf-8') as f:
@@ -150,6 +157,22 @@ def reset_graph_state(graph, orig_file, label_manager):
     except Exception as e:
         print(f"[ОШИБКА] {e}")
         return False
+
+
+def change_profile(label_manager):
+    print("\n" + "="*70)
+    print("СМЕНА УРОВНЯ ЭКСПЕРТНОСТИ")
+    print("="*70)
+    print("   1. Новичок")
+    print("   2. Опытный")
+    print("   3. Эксперт")
+    choice = input("Ваш выбор (1-3): ").strip()
+    profile_map = {'1':'новичок', '2':'опытный', '3':'эксперт'}
+    new_profile = profile_map.get(choice, 'опытный')
+    labels_cfg = os.path.join(BASE_DIR, "labels_config.json")
+    ahp_cfg = os.path.join(BASE_DIR, "ahp_criteria_config.json")
+    new_lm = LabelManager(labels_cfg, ahp_cfg, profile=new_profile)
+    return new_lm
 
 
 def main():
@@ -208,8 +231,9 @@ def main():
             print("   6. Режим дебага")
             print("   7. Загрузить другой граф")
             print("   8. Сбросить состояние")
+            print("   9. Сменить уровень экспертности")
             print("   0. Выход")
-            choice = input("Ваш выбор (0-8): ").strip()
+            choice = input("Ваш выбор (0-9): ").strip()
             if choice == '0':
                 print("До свидания!")
                 return
@@ -244,6 +268,16 @@ def main():
             elif choice == '8':
                 if reset_graph_state(graph, json_file, label_manager):
                     graph.print_ascii_graph()
+                input("Нажмите Enter")
+            elif choice == '9':
+                new_lm = change_profile(label_manager)
+                if new_lm:
+                    label_manager = new_lm
+                    graph.label_manager = label_manager
+                    print(f"Уровень экспертности изменён. Новые веса:")
+                    label_manager.display_criteria_info()
+                else:
+                    print("Не удалось сменить профиль")
                 input("Нажмите Enter")
             else:
                 print("Неверный выбор")
