@@ -61,7 +61,7 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                     print(f"   |    | ({ls:<46}) |                       |")
         print("   +----+--------------------------------------------------+-----------------------+")
         print("   | 0  | Завершить и сохранить результаты                 | -                     |")
-        print("   | i  | Информация о действие                            | -                     |")
+        print("   | i  | Информация о действии                            | -                     |")
         print("   | a  | Показать веса критериев                          | -                     |")
         print("   | q  | Показать историю                                 | -                     |")
         print("   | s  | Показать статистику                              | -                     |")
@@ -142,7 +142,7 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                                     return_to_original = emergency_handler.run_emergency_scenario(sc_id)
                                     if return_to_original:
                                         print("Возврат к основному рецепту.")
-                                        # Продолжаем цикл
+                                        # Продолжаем основной цикл
                                     else:
                                         print("Аварийный сценарий завершён. Возврат в главное меню.")
                                         return

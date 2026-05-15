@@ -9,7 +9,7 @@
     "file": "overheat_kettle.json",
     "description": "Чайник перегрелся, дымит",
     "return_to_original": false,
-    "tags": ["кипячение", "чайник", "безопасность", "нагревание", "плита"]
+    "tags": ["кипячение", "чайник", "нагревание", "плита"]
   },
   "broken_cup": {
     "file": "broken_cup.json",
@@ -21,7 +21,7 @@
     "file": "burnt_food.json",
     "description": "Еда пригорела, дым",
     "return_to_original": false,
-    "tags": ["жарка", "яйца", "сковорода", "масло", "безопасность"]
+    "tags": ["жарка", "яйца", "сковорода", "масло"]
   },
   "lack_of_ingredients": {
     "file": "lack_of_ingredients.json",
@@ -33,25 +33,25 @@
     "file": "cut_injury.json",
     "description": "Порезался ножом при нарезке",
     "return_to_original": true,
-    "tags": ["фрукты", "нарезать", "ножик", "подготовка_фруктов", "безопасность"]
+    "tags": ["фрукты", "нарезать", "ножик", "подготовка_фруктов"]
   },
   "burn_injury": {
     "file": "burn_injury.json",
     "description": "Обжёгся горячей посудой или паром",
     "return_to_original": true,
-    "tags": ["кипяток", "чайник", "кастрюля", "сковорода", "безопасность", "переливание", "кипячение"]
+    "tags": ["кипяток", "чайник", "кастрюля", "сковорода", "переливание", "кипячение"]
   },
   "electric_shock": {
     "file": "electric_shock.json",
     "description": "Удар током от прибора",
     "return_to_original": false,
-    "tags": ["чайник", "плита", "электричество", "безопасность"]
+    "tags": ["чайник", "плита", "электричество"]
   },
   "fire_on_stove": {
     "file": "fire_on_stove.json",
     "description": "Возгорание на плите (масло загорелось)",
     "return_to_original": false,
-    "tags": ["плита", "масло", "сковорода", "жарка", "безопасность"]
+    "tags": ["плита", "масло", "сковорода", "жарка"]
   },
   "broken_glass": {
     "file": "broken_glass.json",
@@ -63,18 +63,18 @@
     "file": "water_boiled_over.json",
     "description": "Вода выкипела, кастрюля сухая",
     "return_to_original": false,
-    "tags": ["кипячение", "кастрюля", "плита", "безопасность"]
+    "tags": ["кипячение", "кастрюля", "плита"]
   },
   "pan_handle_burn": {
     "file": "pan_handle_burn.json",
     "description": "Ручка сковороды перегрелась, обжёгся",
     "return_to_original": true,
-    "tags": ["сковорода", "жарка", "безопасность", "нагревание"]
+    "tags": ["сковорода", "жарка", "нагревание"]
   },
   "spilled_oil": {
     "file": "spilled_oil.json",
     "description": "Пролил масло на плиту",
     "return_to_original": true,
-    "tags": ["масло", "сковорода", "плита", "безопасность", "добавление_масла"]
+    "tags": ["масло", "сковорода", "плита", "добавление_масла"]
   }
 }
