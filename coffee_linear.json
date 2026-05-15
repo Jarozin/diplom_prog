@@ -1,26 +1,11 @@
 {
   "name": "ПриготовлениеКофе",
   "objects": [
-    {
-      "name": "чайник",
-      "type": "object"
-    },
-    {
-      "name": "кружка",
-      "type": "object"
-    },
-    {
-      "name": "источник_воды",
-      "type": "subject"
-    },
-    {
-      "name": "банка_кофе",
-      "type": "subject"
-    },
-    {
-      "name": "ложка",
-      "type": "subject"
-    }
+    {"name": "чайник", "type": "object"},
+    {"name": "кружка", "type": "object"},
+    {"name": "источник_воды", "type": "subject"},
+    {"name": "банка_кофе", "type": "subject"},
+    {"name": "ложка", "type": "subject"}
   ],
   "states": [
     {
@@ -107,204 +92,31 @@
       "id": "a1",
       "name": "НалитьВодуВЧайник",
       "description": "Налить воду из источника в чайник",
-      "required_objects": ["чайник", "источник_воды"],
-      "preconditions": [
-        {
-          "type": "object_property",
-          "object": "чайник",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": false
-        },
-        {
-          "type": "object_property",
-          "object": "источник_воды",
-          "property": "вода_есть",
-          "operator": "==",
-          "value": true
-        }
-      ],
-      "postconditions": [
-        {
-          "type": "set_property",
-          "object": "чайник",
-          "property": "содержит_воду",
-          "value": true
-        },
-        {
-          "type": "print",
-          "message": "Вода налита в чайник"
-        }
-      ]
+      "required_objects": ["чайник", "источник_воды"]
     },
     {
       "id": "a2",
       "name": "ВскипятитьВоду",
       "description": "Вскипятить воду в чайнике",
-      "required_objects": ["чайник"],
-      "preconditions": [
-        {
-          "type": "object_property",
-          "object": "чайник",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "чайник",
-          "property": "вода_вскипячена",
-          "operator": "==",
-          "value": false
-        }
-      ],
-      "postconditions": [
-        {
-          "type": "set_property",
-          "object": "чайник",
-          "property": "вода_вскипячена",
-          "value": true
-        },
-        {
-          "type": "print",
-          "message": "Вода вскипячена"
-        }
-      ]
+      "required_objects": ["чайник"]
     },
     {
       "id": "a3",
       "name": "НалитьКипятокВКружку",
       "description": "Перелить кипяток из чайника в кружку",
-      "required_objects": ["чайник", "кружка"],
-      "preconditions": [
-        {
-          "type": "object_property",
-          "object": "чайник",
-          "property": "вода_вскипячена",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "чайник",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": false
-        }
-      ],
-      "postconditions": [
-        {
-          "type": "set_property",
-          "object": "чайник",
-          "property": "содержит_воду",
-          "value": false
-        },
-        {
-          "type": "set_property",
-          "object": "кружка",
-          "property": "содержит_воду",
-          "value": true
-        },
-        {
-          "type": "print",
-          "message": "Кипяток налит в кружку"
-        }
-      ]
+      "required_objects": ["чайник", "кружка"]
     },
     {
       "id": "a4",
       "name": "ДобавитьКофе",
       "description": "Добавить кофе из банки в кружку",
-      "required_objects": ["кружка", "банка_кофе"],
-      "preconditions": [
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "содержит_кофе",
-          "operator": "==",
-          "value": false
-        },
-        {
-          "type": "object_property",
-          "object": "банка_кофе",
-          "property": "кофе_есть",
-          "operator": "==",
-          "value": true
-        }
-      ],
-      "postconditions": [
-        {
-          "type": "set_property",
-          "object": "кружка",
-          "property": "содержит_кофе",
-          "value": true
-        },
-        {
-          "type": "print",
-          "message": "Кофе добавлен в кружку"
-        }
-      ]
+      "required_objects": ["кружка", "банка_кофе"]
     },
     {
       "id": "a5",
       "name": "ПеремешатьКофе",
       "description": "Перемешать кофе в кружке ложкой",
-      "required_objects": ["кружка", "ложка"],
-      "preconditions": [
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "содержит_воду",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "содержит_кофе",
-          "operator": "==",
-          "value": true
-        },
-        {
-          "type": "object_property",
-          "object": "кружка",
-          "property": "перемешано",
-          "operator": "==",
-          "value": false
-        }
-      ],
-      "postconditions": [
-        {
-          "type": "set_property",
-          "object": "кружка",
-          "property": "перемешано",
-          "value": true
-        },
-        {
-          "type": "set_property",
-          "object": "ложка",
-          "property": "чистая",
-          "value": false
-        },
-        {
-          "type": "print",
-          "message": "Кофе перемешан. Напиток готов."
-        }
-      ]
+      "required_objects": ["кружка", "ложка"]
     }
   ],
   "transitions": [

@@ -1,7 +1,7 @@
-"""Модели данных для графа инструкций"""
+"""Модели данных для графа инструкций (без предусловий и постусловий)"""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional, Any, Callable
+from typing import Dict, List, Set, Optional, Any
 from enum import Enum
 
 
@@ -23,7 +23,6 @@ class StateType(Enum):
         return mapping.get(value.lower(), cls.INTERMEDIATE)
     
     def to_rus(self) -> str:
-        """Возвращает русское название типа состояния"""
         mapping = {
             StateType.INITIAL: "Начальное",
             StateType.FINAL: "Конечное",
@@ -69,7 +68,6 @@ class State:
         return hash(self.id)
     
     def get_true_properties(self, obj_name: str) -> List[str]:
-        """Возвращает список свойств объекта, которые имеют значение True"""
         if obj_name not in self.objects_state:
             return []
         props = self.objects_state[obj_name]
@@ -84,36 +82,16 @@ class State:
 
 @dataclass
 class Action:
-    """Действие, которое переводит из одного состояния в другое"""
+    """Действие, которое переводит из одного состояния в другое (без условий)"""
     id: str
     name: str
     description: str = ""
-    
     required_objects: Set[str] = field(default_factory=set)
     produced_objects: Set[str] = field(default_factory=set)
     consumed_objects: Set[str] = field(default_factory=set)
-    preconditions: List[Dict] = field(default_factory=list)
-    postconditions: List[Dict] = field(default_factory=list)
+    # Поля preconditions/postconditions удалены
     execution_time: float = 1.0
     probability: float = 1.0
-    
-    _precondition_funcs: List[Callable] = field(default_factory=list, repr=False)
-    _postcondition_funcs: List[Callable] = field(default_factory=list, repr=False)
-    
-    def can_execute(self, context: Dict[str, Any]) -> bool:
-        for precondition in self._precondition_funcs:
-            if not precondition(context):
-                return False
-        return True
-    
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        if not self.can_execute(context):
-            raise ValueError(f"Действие {self.name} не может быть выполнено")
-        
-        for postcondition in self._postcondition_funcs:
-            postcondition(context)
-        
-        return context
 
 
 @dataclass
@@ -124,9 +102,7 @@ class Label:
     recommendations: List[Dict]  # Список словарей с полями 'text' и 'scores'
     
     def matches(self, text: str) -> bool:
-        """Проверяет, соответствует ли текст метке"""
         text_lower = text.lower()
-        # Удаляем подчеркивания для поиска
         search_text = text_lower.replace('_', ' ')
         for keyword in self.keywords:
             keyword_lower = keyword.lower().replace('_', ' ')
@@ -144,4 +120,4 @@ class HistoryStep:
     action_name: str
     to_state: str
     to_state_name: str
-    recommendations: List[Dict]  # Список показанных рекомендаций
+    recommendations: List[Dict]

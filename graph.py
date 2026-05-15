@@ -1,30 +1,28 @@
-"""Основной класс графа инструкций"""
+"""Основной класс графа инструкций (без проверки условий)"""
 
-from typing import Dict, List, Set, Optional, Any, Tuple
-from collections import defaultdict
+from typing import Dict, List, Optional, Tuple, Any
 import json
 
 from models import Object, State, Action, StateType, HistoryStep
-from conditions import compile_conditions
-from labels import LabelManager
+# import compile_conditions - удалён
 
 
 class InstructionGraph:
-    """Гибридный граф инструкций (Сеть Петри + Диаграмма состояний)"""
+    """Гибридный граф инструкций (без пред- и постусловий)"""
     
-    def __init__(self, name: str = "InstructionGraph", label_manager: Optional[LabelManager] = None):
+    def __init__(self, name: str = "InstructionGraph", label_manager=None):
         self.name = name
         self.states: Dict[str, State] = {}
         self.actions: Dict[str, Action] = {}
         self.objects: Dict[str, Object] = {}
         self.transitions: Dict[tuple, str] = {}
         self.current_state_id: Optional[str] = None
-        self.execution_history: List[HistoryStep] = []  # Теперь список HistoryStep
-        self.label_manager = label_manager or LabelManager()
+        self.execution_history: List[HistoryStep] = []
+        self.label_manager = label_manager
         
     @classmethod
-    def from_json(cls, json_file: str, label_manager: Optional[LabelManager] = None):
-        """Загрузка графа из JSON файла"""
+    def from_json(cls, json_file: str, label_manager=None):
+        """Загрузка графа из JSON (игнорирует preconditions/postconditions)"""
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -50,8 +48,7 @@ class InstructionGraph:
             )
             graph.add_state(state)
         
-        # Загружаем действия (сначала без функций)
-        actions_data = []
+        # Загружаем действия (без компиляции условий)
         for action_data in data.get('actions', []):
             action = Action(
                 id=action_data['id'],
@@ -60,17 +57,9 @@ class InstructionGraph:
                 required_objects=set(action_data.get('required_objects', [])),
                 produced_objects=set(action_data.get('produced_objects', [])),
                 consumed_objects=set(action_data.get('consumed_objects', [])),
-                preconditions=action_data.get('preconditions', []),
-                postconditions=action_data.get('postconditions', []),
                 execution_time=action_data.get('execution_time', 1.0),
                 probability=action_data.get('probability', 1.0)
             )
-            actions_data.append((action, action_data))
-        
-        # Компилируем условия и добавляем действия
-        for action, action_data in actions_data:
-            action._precondition_funcs = compile_conditions(action.preconditions, graph)
-            action._postcondition_funcs = compile_conditions(action.postconditions, graph)
             graph.add_action(action)
         
         # Загружаем переходы
@@ -84,21 +73,17 @@ class InstructionGraph:
         return graph
     
     def add_state(self, state: State) -> None:
-        """Добавление состояния"""
         self.states[state.id] = state
         if state.state_type == StateType.INITIAL and self.current_state_id is None:
             self.current_state_id = state.id
     
     def add_action(self, action: Action) -> None:
-        """Добавление действия"""
         self.actions[action.id] = action
     
     def add_object(self, obj: Object) -> None:
-        """Добавление объекта"""
         self.objects[obj.name] = obj
     
     def add_transition(self, from_state_id: str, action_id: str, to_state_id: str) -> None:
-        """Добавление перехода"""
         if from_state_id not in self.states:
             raise ValueError(f"Состояние {from_state_id} не найдено")
         if action_id not in self.actions:
@@ -109,7 +94,10 @@ class InstructionGraph:
         self.transitions[(from_state_id, action_id)] = to_state_id
     
     def get_available_actions(self, state_id: Optional[str] = None) -> List[Tuple[Action, str]]:
-        """Возвращает список доступных (action, next_state) из состояния"""
+        """
+        Возвращает все действия, для которых есть переход из указанного состояния.
+        Проверка условий отсутствует.
+        """
         if state_id is None:
             state_id = self.current_state_id
         
@@ -120,19 +108,15 @@ class InstructionGraph:
         for (from_state, action_id), to_state in self.transitions.items():
             if from_state == state_id:
                 action = self.actions.get(action_id)
-                if action and action.can_execute(self._get_context()):
+                if action:
                     available.append((action, to_state))
         
         return available
     
     def execute_action(self, action_id: str, recommendations: Optional[List[Dict]] = None, silent: bool = False) -> bool:
         """
-        Выполнение действия с сохранением рекомендаций в историю
-        
-        Args:
-            action_id: идентификатор действия
-            recommendations: список рекомендаций, показанных пользователю
-            silent: подавлять вывод
+        Выполнение действия: переход в новое состояние, обновление объектов не производится,
+        так как постусловия удалены. Сохраняет шаг в историю.
         """
         if self.current_state_id is None:
             if not silent:
@@ -152,78 +136,39 @@ class InstructionGraph:
             return False
         
         next_state_id = self.transitions[transition_key]
-        context = self._get_context(next_state_id)
         
-        try:
-            new_context = action.execute(context)
-            self._update_context(new_context, next_state_id)
-            
-            old_state = self.current_state_id
-            old_state_name = self.states[old_state].name
-            self.current_state_id = next_state_id
-            new_state_name = self.states[self.current_state_id].name
-            
-            # Сохраняем шаг истории с рекомендациями
-            history_step = HistoryStep(
-                from_state=old_state,
-                from_state_name=old_state_name,
-                action_id=action_id,
-                action_name=action.name,
-                to_state=self.current_state_id,
-                to_state_name=new_state_name,
-                recommendations=recommendations or []
-            )
-            self.execution_history.append(history_step)
-            
-            if not silent:
-                print(f"\n[ВЫПОЛНЕНО] {action.name}")
-                print(f"     Из: {old_state_name}")
-                print(f"     В: {new_state_name}")
-                
-                if action.consumed_objects:
-                    print(f"     Потреблено: {', '.join(action.consumed_objects)}")
-                if action.produced_objects:
-                    print(f"     Создано: {', '.join(action.produced_objects)}")
-                
-                # Показываем рекомендации для выполненного действия
-                if self.label_manager and recommendations:
-                    print(f"\n   [ПОКАЗАННЫЕ РЕКОМЕНДАЦИИ]")
-                    for rec in recommendations:
-                        print(f"      - {rec['text']}")
-            
-            return True
-            
-        except Exception as e:
-            if not silent:
-                print(f"[ОШИБКА] При выполнении {action.name}: {e}")
-            return False
-    
-    def _get_context(self, next_state_id: Optional[str] = None) -> Dict[str, Any]:
-        """Формирование контекста выполнения"""
-        context = {
-            'current_state': self.current_state_id,
-            'next_state_id': next_state_id,
-            'objects': self.objects.copy(),
-            'execution_history': self.execution_history.copy()
-        }
-        return context
-    
-    def _update_context(self, context: Dict[str, Any], next_state_id: str) -> None:
-        """Обновление контекста после выполнения"""
-        if 'objects' in context:
-            self.objects.update(context['objects'])
+        old_state = self.current_state_id
+        old_state_name = self.states[old_state].name
+        self.current_state_id = next_state_id
+        new_state_name = self.states[self.current_state_id].name
+        
+        # Сохраняем шаг истории
+        history_step = HistoryStep(
+            from_state=old_state,
+            from_state_name=old_state_name,
+            action_id=action_id,
+            action_name=action.name,
+            to_state=self.current_state_id,
+            to_state_name=new_state_name,
+            recommendations=recommendations or []
+        )
+        self.execution_history.append(history_step)
+        
+        if not silent:
+            print(f"\n[ВЫПОЛНЕНО] {action.name}")
+            print(f"     Из: {old_state_name}")
+            print(f"     В: {new_state_name}")
+        
+        return True
     
     def get_current_objects_state(self) -> Dict[str, Dict[str, Any]]:
-        """Получить состояние объектов в текущем состоянии графа"""
         if self.current_state_id and self.current_state_id in self.states:
             return self.states[self.current_state_id].objects_state
         return {}
     
     def format_objects_state(self, objects_state: Dict[str, Dict[str, Any]]) -> str:
-        """Форматирует состояние объектов для вывода"""
         if not objects_state:
             return ""
-        
         lines = []
         for obj_name, obj_props in objects_state.items():
             true_props = []
@@ -232,24 +177,19 @@ class InstructionGraph:
                     true_props.append(prop_name)
                 elif prop_value is not False and prop_value is not None:
                     true_props.append(f"{prop_name}={prop_value}")
-            
             if true_props:
                 lines.append(f"      {obj_name}: {', '.join(true_props)}")
             else:
                 lines.append(f"      {obj_name}: (нет активных свойств)")
-        
         return "\n".join(lines)
     
     def show_history(self):
-        """Показывает историю выполнения с рекомендациями"""
         print("\n[ИСТОРИЯ ВЫПОЛНЕНИЯ]")
         if not self.execution_history:
             print("   (пусто)")
             return
-        
         for i, step in enumerate(self.execution_history, 1):
             print(f"\n   {i}. {step.from_state_name} -> [{step.action_name}] -> {step.to_state_name}")
-            
             if step.recommendations:
                 print(f"      Рекомендации:")
                 for rec in step.recommendations:
@@ -258,22 +198,18 @@ class InstructionGraph:
                 print(f"      (рекомендации не показывались)")
     
     def print_statistics(self):
-        """Показывает статистику"""
         print("\n[ТЕКУЩАЯ СТАТИСТИКА]")
         print(f"   Текущее состояние: {self.states[self.current_state_id].name if self.current_state_id else 'Нет'}")
         print(f"   Выполнено действий: {len(self.execution_history)}")
         print(f"   Доступно действий: {len(self.get_available_actions())}")
         print(f"   Всего состояний: {len(self.states)}")
         print(f"   Всего объектов: {len(self.objects)}")
-        
         objects_state = self.get_current_objects_state()
         if objects_state:
             print(f"\n[СОСТОЯНИЕ ОБЪЕКТОВ В ТЕКУЩЕМ СОСТОЯНИИ]")
-            formatted = self.format_objects_state(objects_state)
-            print(formatted)
+            print(self.format_objects_state(objects_state))
     
     def print_ascii_graph(self) -> None:
-        """Вывод графа в текстовом виде"""
         print("\n" + "="*70)
         print(f"ГРАФ ИНСТРУКЦИЙ: {self.name}")
         print("="*70)
@@ -288,7 +224,6 @@ class InstructionGraph:
             }.get(state.state_type, "(-)")
             current_marker = " <- ТЕКУЩЕЕ" if state_id == self.current_state_id else ""
             print(f"   {type_marker} {state.name} [{state_id}]: {state.description}{current_marker}")
-            
             if state.objects_state:
                 for obj_name, obj_props in state.objects_state.items():
                     true_props = []
@@ -307,7 +242,6 @@ class InstructionGraph:
             print(f"   [-] {action.name} [{action_id}]: {action.description}")
             if action.required_objects:
                 print(f"        Требует: {', '.join(action.required_objects)}")
-            
             if self.label_manager:
                 labels = self.label_manager.get_labels_for_action(action)
                 if labels:

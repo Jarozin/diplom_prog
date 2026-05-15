@@ -1,42 +1,15 @@
 {
   "name": "ПриготовлениеКомпота",
   "objects": [
-    {
-      "name": "кастрюля",
-      "type": "object"
-    },
-    {
-      "name": "плита",
-      "type": "object"
-    },
-    {
-      "name": "вода",
-      "type": "object"
-    },
-    {
-      "name": "фрукты",
-      "type": "object"
-    },
-    {
-      "name": "сахар",
-      "type": "object"
-    },
-    {
-      "name": "ложка",
-      "type": "object"
-    },
-    {
-      "name": "кружка",
-      "type": "object"
-    },
-    {
-      "name": "повар",
-      "type": "subject"
-    },
-    {
-      "name": "источник_фруктов",
-      "type": "subject"
-    }
+    {"name": "кастрюля", "type": "object"},
+    {"name": "плита", "type": "object"},
+    {"name": "вода", "type": "object"},
+    {"name": "фрукты", "type": "object"},
+    {"name": "сахар", "type": "object"},
+    {"name": "ложка", "type": "object"},
+    {"name": "кружка", "type": "object"},
+    {"name": "повар", "type": "subject"},
+    {"name": "источник_фруктов", "type": "subject"}
   ],
   "states": [
     {
@@ -198,126 +171,49 @@
       "id": "a1",
       "name": "ПоставитьКастрюлю",
       "description": "Поставить кастрюлю на плиту",
-      "required_objects": ["кастрюля", "плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "на_плите", "operator": "==", "value": false}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "кастрюля", "property": "на_плите", "value": true},
-        {"type": "print", "message": "Кастрюля поставлена на плиту"}
-      ]
+      "required_objects": ["кастрюля", "плита"]
     },
     {
       "id": "a2",
       "name": "НалитьВоду",
       "description": "Налить воду в кастрюлю",
-      "required_objects": ["кастрюля", "вода"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "содержит_воду", "operator": "==", "value": false},
-        {"type": "object_property", "object": "вода", "property": "в_наличии", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "кастрюля", "property": "содержит_воду", "value": true},
-        {"type": "set_property", "object": "вода", "property": "в_наличии", "value": false},
-        {"type": "set_property", "object": "вода", "property": "налита", "value": true},
-        {"type": "print", "message": "Вода налита в кастрюлю"}
-      ]
+      "required_objects": ["кастрюля", "вода"]
     },
     {
       "id": "a3",
       "name": "ВскипятитьВоду",
       "description": "Вскипятить воду в кастрюле",
-      "required_objects": ["кастрюля", "плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "содержит_воду", "operator": "==", "value": true},
-        {"type": "object_property", "object": "плита", "property": "включена", "operator": "==", "value": false}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "плита", "property": "включена", "value": true},
-        {"type": "set_property", "object": "плита", "property": "конфорка_горячая", "value": true},
-        {"type": "set_property", "object": "кастрюля", "property": "вода_кипит", "value": true},
-        {"type": "set_property", "object": "вода", "property": "кипит", "value": true},
-        {"type": "print", "message": "Вода вскипела"}
-      ]
+      "required_objects": ["кастрюля", "плита"]
     },
     {
       "id": "a4",
       "name": "ПодготовитьФрукты",
       "description": "Вымыть и нарезать фрукты",
-      "required_objects": ["фрукты", "источник_фруктов"],
-      "preconditions": [
-        {"type": "object_property", "object": "фрукты", "property": "в_наличии", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "фрукты", "property": "помыты", "value": true},
-        {"type": "set_property", "object": "фрукты", "property": "нарезаны", "value": true},
-        {"type": "print", "message": "Фрукты вымыты и нарезаны"}
-      ]
+      "required_objects": ["фрукты", "источник_фруктов"]
     },
     {
       "id": "a5",
       "name": "ДобавитьФрукты",
       "description": "Добавить фрукты в кипящую воду",
-      "required_objects": ["кастрюля", "фрукты"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "вода_кипит", "operator": "==", "value": true},
-        {"type": "object_property", "object": "фрукты", "property": "помыты", "operator": "==", "value": true},
-        {"type": "object_property", "object": "фрукты", "property": "нарезаны", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "кастрюля", "property": "содержит_фрукты", "value": true},
-        {"type": "set_property", "object": "фрукты", "property": "в_наличии", "value": false},
-        {"type": "print", "message": "Фрукты добавлены в компот"}
-      ]
+      "required_objects": ["кастрюля", "фрукты"]
     },
     {
       "id": "a6",
       "name": "ДобавитьСахар",
       "description": "Добавить сахар в компот",
-      "required_objects": ["кастрюля", "сахар"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "содержит_фрукты", "operator": "==", "value": true},
-        {"type": "object_property", "object": "сахар", "property": "в_наличии", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "сахар", "property": "в_наличии", "value": false},
-        {"type": "set_property", "object": "сахар", "property": "добавлен", "value": true},
-        {"type": "print", "message": "Сахар добавлен в компот"}
-      ]
+      "required_objects": ["кастрюля", "сахар"]
     },
     {
       "id": "a7",
       "name": "ВаритьКомпот",
       "description": "Варить компот до готовности",
-      "required_objects": ["кастрюля", "плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "кастрюля", "property": "содержит_фрукты", "operator": "==", "value": true},
-        {"type": "object_property", "object": "сахар", "property": "добавлен", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "плита", "property": "включена", "value": false},
-        {"type": "set_property", "object": "плита", "property": "конфорка_горячая", "value": false},
-        {"type": "set_property", "object": "вода", "property": "настоялась", "value": true},
-        {"type": "print", "message": "Компот готов"}
-      ]
+      "required_objects": ["кастрюля", "плита"]
     },
     {
       "id": "a8",
       "name": "РазлитьПоКружкам",
       "description": "Разлить готовый компот по кружкам",
-      "required_objects": ["кастрюля", "кружка", "ложка"],
-      "preconditions": [
-        {"type": "object_property", "object": "вода", "property": "настоялась", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "кастрюля", "property": "содержит_воду", "value": false},
-        {"type": "set_property", "object": "кастрюля", "property": "содержит_фрукты", "value": false},
-        {"type": "set_property", "object": "кастрюля", "property": "на_плите", "value": false},
-        {"type": "set_property", "object": "кружка", "property": "чистая", "value": false},
-        {"type": "set_property", "object": "кружка", "property": "содержит_напиток", "value": true},
-        {"type": "set_property", "object": "ложка", "property": "чистая", "value": false},
-        {"type": "print", "message": "Компот разлит по кружкам"}
-      ]
+      "required_objects": ["кастрюля", "кружка", "ложка"]
     }
   ],
   "transitions": [

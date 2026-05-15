@@ -1,38 +1,14 @@
 {
   "name": "ЖаркаЯичницы",
   "objects": [
-    {
-      "name": "сковорода",
-      "type": "object"
-    },
-    {
-      "name": "плита",
-      "type": "object"
-    },
-    {
-      "name": "яйца",
-      "type": "object"
-    },
-    {
-      "name": "масло",
-      "type": "object"
-    },
-    {
-      "name": "лопатка",
-      "type": "object"
-    },
-    {
-      "name": "тарелка",
-      "type": "object"
-    },
-    {
-      "name": "повар",
-      "type": "subject"
-    },
-    {
-      "name": "источник_яиц",
-      "type": "subject"
-    }
+    {"name": "сковорода", "type": "object"},
+    {"name": "плита", "type": "object"},
+    {"name": "яйца", "type": "object"},
+    {"name": "масло", "type": "object"},
+    {"name": "лопатка", "type": "object"},
+    {"name": "тарелка", "type": "object"},
+    {"name": "повар", "type": "subject"},
+    {"name": "источник_яиц", "type": "subject"}
   ],
   "states": [
     {
@@ -169,119 +145,49 @@
       "id": "a1",
       "name": "ПоставитьСковороду",
       "description": "Поставить сковороду на плиту",
-      "required_objects": ["сковорода", "плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "сковорода", "property": "на_плите", "operator": "==", "value": false}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "сковорода", "property": "на_плите", "value": true},
-        {"type": "print", "message": "Сковорода поставлена на плиту"}
-      ]
+      "required_objects": ["сковорода", "плита"]
     },
     {
       "id": "a2",
       "name": "ВключитьПлиту",
       "description": "Включить конфорку плиты",
-      "required_objects": ["плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "плита", "property": "включена", "operator": "==", "value": false}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "плита", "property": "включена", "value": true},
-        {"type": "set_property", "object": "плита", "property": "конфорка_горячая", "value": true},
-        {"type": "print", "message": "Плита включена, сковорода нагревается"}
-      ]
+      "required_objects": ["плита"]
     },
     {
       "id": "a3",
       "name": "НагретьСковороду",
       "description": "Дождаться нагрева сковороды",
-      "required_objects": ["сковорода", "плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "сковорода", "property": "нагрета", "operator": "==", "value": false},
-        {"type": "object_property", "object": "плита", "property": "включена", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "сковорода", "property": "нагрета", "value": true},
-        {"type": "print", "message": "Сковорода нагрета"}
-      ]
+      "required_objects": ["сковорода", "плита"]
     },
     {
       "id": "a4",
       "name": "ДобавитьМасло",
       "description": "Добавить масло на сковороду",
-      "required_objects": ["сковорода", "масло"],
-      "preconditions": [
-        {"type": "object_property", "object": "сковорода", "property": "нагрета", "operator": "==", "value": true},
-        {"type": "object_property", "object": "сковорода", "property": "содержит_масло", "operator": "==", "value": false},
-        {"type": "object_property", "object": "масло", "property": "в_наличии", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "сковорода", "property": "содержит_масло", "value": true},
-        {"type": "set_property", "object": "масло", "property": "в_наличии", "value": false},
-        {"type": "set_property", "object": "масло", "property": "растоплено", "value": true},
-        {"type": "print", "message": "Масло добавлено на сковороду"}
-      ]
+      "required_objects": ["сковорода", "масло"]
     },
     {
       "id": "a5",
       "name": "РазбитьЯйца",
       "description": "Разбить яйца на сковороду",
-      "required_objects": ["сковорода", "яйца"],
-      "preconditions": [
-        {"type": "object_property", "object": "сковорода", "property": "содержит_масло", "operator": "==", "value": true},
-        {"type": "object_property", "object": "яйца", "property": "в_наличии", "operator": "==", "value": true},
-        {"type": "object_property", "object": "источник_яиц", "property": "яйца_есть", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "яйца", "property": "в_наличии", "value": false},
-        {"type": "set_property", "object": "яйца", "property": "разбиты", "value": true},
-        {"type": "print", "message": "Яйца разбиты на сковороду"}
-      ]
+      "required_objects": ["сковорода", "яйца"]
     },
     {
       "id": "a6",
       "name": "ДождатьсяГотовности",
       "description": "Ждать пока яичница приготовится",
-      "required_objects": ["сковорода"],
-      "preconditions": [
-        {"type": "object_property", "object": "яйца", "property": "разбиты", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "яйца", "property": "готовы", "value": true},
-        {"type": "print", "message": "Яичница готова"}
-      ]
+      "required_objects": ["сковорода"]
     },
     {
       "id": "a7",
       "name": "ВыключитьПлиту",
       "description": "Выключить плиту",
-      "required_objects": ["плита"],
-      "preconditions": [
-        {"type": "object_property", "object": "плита", "property": "включена", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "плита", "property": "включена", "value": false},
-        {"type": "set_property", "object": "плита", "property": "конфорка_горячая", "value": false},
-        {"type": "print", "message": "Плита выключена"}
-      ]
+      "required_objects": ["плита"]
     },
     {
       "id": "a8",
       "name": "ПодатьНаТарелку",
       "description": "Переложить яичницу на тарелку",
-      "required_objects": ["сковорода", "тарелка", "лопатка"],
-      "preconditions": [
-        {"type": "object_property", "object": "яйца", "property": "готовы", "operator": "==", "value": true},
-        {"type": "object_property", "object": "тарелка", "property": "чистая", "operator": "==", "value": true}
-      ],
-      "postconditions": [
-        {"type": "set_property", "object": "сковорода", "property": "содержит_масло", "value": false},
-        {"type": "set_property", "object": "тарелка", "property": "чистая", "value": false},
-        {"type": "set_property", "object": "тарелка", "property": "содержит_еду", "value": true},
-        {"type": "set_property", "object": "лопатка", "property": "чистая", "value": false},
-        {"type": "print", "message": "Яичница подана на тарелку"}
-      ]
+      "required_objects": ["сковорода", "тарелка", "лопатка"]
     }
   ],
   "transitions": [
@@ -291,6 +197,7 @@
     {"from": "s3", "action": "a4", "to": "s4"},
     {"from": "s4", "action": "a5", "to": "s5"},
     {"from": "s5", "action": "a6", "to": "s6"},
-    {"from": "s6", "action": "a7", "to": "s7"}
+    {"from": "s6", "action": "a7", "to": "s7"},
+    {"from": "s7", "action": "a8", "to": "s8"}
   ]
 }
