@@ -10,6 +10,17 @@ from visualization import visualize_graph
 from labels import LabelManager
 from debug_mode import DebugMode
 
+# Определение путей к папкам
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GRAPH_DIR = os.path.join(BASE_DIR, "graph")
+RESULT_DIR = os.path.join(BASE_DIR, "result")
+DEBUG_DIR = os.path.join(BASE_DIR, "debug")
+
+# Создаём папки, если их нет
+os.makedirs(GRAPH_DIR, exist_ok=True)
+os.makedirs(RESULT_DIR, exist_ok=True)
+os.makedirs(DEBUG_DIR, exist_ok=True)
+
 
 def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json_file: str):
     """Интерактивный пошаговый режим с ранжированными рекомендациями (МАИ)"""
@@ -56,7 +67,6 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
             action_name = action.name[:48] + "..." if len(action.name) > 48 else action.name
             print(f"   | {idx:2} | {action_name:<48} | {next_state.name:<21} |")
             
-            # Показываем метки для действия
             if label_manager:
                 labels = label_manager.get_labels_for_action(action)
                 if labels:
@@ -118,13 +128,10 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                 print("[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий!")
             continue
         
-        # Попытка выполнить действие
         try:
             idx = int(choice)
             if 1 <= idx <= len(available_actions):
-                action, next_state_id = available_actions[idx - 1]
-                
-                # Получаем топ-3 рекомендации для сохранения в историю
+                action, _ = available_actions[idx - 1]
                 recommendations_to_show = []
                 if label_manager:
                     top_recs = label_manager.get_top_recommendations_for_action(action, top_n=3)
@@ -139,7 +146,6 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
                 
                 print(f"\nВыполнить действие: {action.name}?")
                 confirm = input("   Подтвердить (y/n): ").strip().lower()
-                
                 if confirm == 'y':
                     print(f"\nВыполняется: {action.name}...")
                     success = graph.execute_action(action.id, recommendations=recommendations_to_show)
@@ -159,12 +165,12 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
     print(f"Пошаговый режим завершен. Выполнено шагов: {steps}")
     print("="*70)
     
-    # Сохраняем результаты после выполнения
-    result_file = json_file.replace('.json', '_result.json')
+    # Сохраняем результаты в папку result
+    base_name = os.path.basename(json_file)
+    result_file = os.path.join(RESULT_DIR, base_name.replace('.json', '_result.json'))
     print(f"\nСохранение результатов в {result_file}...")
     
     final_objects_state = graph.get_current_objects_state()
-    
     history_data = []
     for step in graph.execution_history:
         history_data.append({
@@ -191,24 +197,15 @@ def step_by_step_mode(graph: InstructionGraph, label_manager: LabelManager, json
 def reset_graph_state(graph: InstructionGraph, original_json_file: str, label_manager: LabelManager):
     """Сброс состояния графа к начальному"""
     print("\n[СБРОС СОСТОЯНИЯ ГРАФА]")
-    
-    # Сохраняем имя графа
-    graph_name = graph.name
-    
-    # Создаем новый граф из того же JSON файла
     try:
         new_graph = InstructionGraph.from_json(original_json_file, label_manager)
-        
-        # Копируем все атрибуты из нового графа в старый
         graph.name = new_graph.name
         graph.states = new_graph.states
         graph.actions = new_graph.actions
         graph.objects = new_graph.objects
         graph.transitions = new_graph.transitions
         graph.current_state_id = new_graph.current_state_id
-        graph.execution_history = []  # Очищаем историю
-        graph.tokens = {}  # Очищаем токены, если есть
-        
+        graph.execution_history = []
         print("[УСПЕХ] Состояние графа сброшено к начальному")
         return True
     except Exception as e:
@@ -217,7 +214,10 @@ def reset_graph_state(graph: InstructionGraph, original_json_file: str, label_ma
 
 
 def main():
-    # Бесконечный цикл для возврата в главное меню
+    # Глобальные настройки путей
+    labels_config = os.path.join(BASE_DIR, "labels_config.json")
+    ahp_config = os.path.join(BASE_DIR, "ahp_criteria_config.json")
+    
     json_file = None
     
     while True:
@@ -225,27 +225,25 @@ def main():
         print("ЗАГРУЗЧИК ГРАФА ИНСТРУКЦИЙ (Сеть Петри + Диаграмма состояний)")
         print("=" * 70)
         
-        # Загружаем менеджер меток (с полным МАИ)
-        labels_config = "labels_config.json"
-        ahp_config = "ahp_criteria_config.json"
         label_manager = LabelManager(labels_config, ahp_config)
         
-        # Запрашиваем файл инструкции, если еще не загружен
         if json_file is None:
             if len(sys.argv) > 1:
-                json_file = sys.argv[1]
+                user_input = sys.argv[1]
             else:
-                json_file = input("\nВведите путь к JSON файлу с инструкцией (по умолчанию: coffee_linear.json): ").strip()
-                if not json_file:
-                    json_file = "coffee_linear.json"
-        
-        # Проверка существования файла
-        while not os.path.exists(json_file):
-            print(f"\n[ОШИБКА] Файл {json_file} не найден!")
-            json_file = input("Введите правильный путь к JSON файлу (или 'exit' для выхода): ").strip()
-            if json_file.lower() == 'exit':
-                print("\nДо свидания!")
-                return
+                user_input = input("\nВведите имя файла инструкции (из папки graph) или полный путь: ").strip()
+                if not user_input:
+                    user_input = "coffee_linear.json"
+            
+            # Ищем файл сначала в GRAPH_DIR, потом как есть
+            if os.path.exists(os.path.join(GRAPH_DIR, user_input)):
+                json_file = os.path.join(GRAPH_DIR, user_input)
+            elif os.path.exists(user_input):
+                json_file = user_input
+            else:
+                print(f"\n[ОШИБКА] Файл {user_input} не найден ни в {GRAPH_DIR}, ни по указанному пути.")
+                json_file = None
+                continue
         
         try:
             print(f"\nЗагрузка графа из {json_file}...")
@@ -265,7 +263,6 @@ def main():
         
         graph.print_ascii_graph()
         
-        # Главное меню
         while True:
             print("\n" + "="*70)
             print("ГЛАВНОЕ МЕНЮ")
@@ -287,12 +284,10 @@ def main():
                 print("\nЗапуск пошагового режима...")
                 input("Нажмите Enter для начала...")
                 step_by_step_mode(graph, label_manager, json_file)
-                
                 print("\n[ИТОГОВАЯ СТАТИСТИКА]")
                 graph.print_statistics()
                 print("\n[ПОЛНАЯ ИСТОРИЯ]")
                 graph.show_history()
-                
                 input("\nНажмите Enter для возврата в главное меню...")
                 
             elif choice == '2':
@@ -312,7 +307,6 @@ def main():
                 for label in label_manager.labels:
                     print(f"\nМетка: {label.name}")
                     print(f"   Ключевые слова: {', '.join(label.keywords)}")
-                    print(f"   Рекомендации с оценками:")
                     for i, rec in enumerate(label.recommendations, 1):
                         text = rec.get('text', '') if isinstance(rec, dict) else rec
                         scores = rec.get('scores', {}) if isinstance(rec, dict) else {}
@@ -337,18 +331,21 @@ def main():
             
             elif choice == '7':
                 print("\n[ЗАГРУЗКА ДРУГОГО ГРАФА]")
-                new_json_file = input("Введите путь к JSON файлу: ").strip()
-                if new_json_file and os.path.exists(new_json_file):
-                    json_file = new_json_file
-                    print(f"Загрузка {json_file}...")
-                    break  # Выход из внутреннего цикла для загрузки нового графа
+                new_input = input("Введите имя файла (из папки graph) или полный путь: ").strip()
+                if new_input:
+                    if os.path.exists(os.path.join(GRAPH_DIR, new_input)):
+                        json_file = os.path.join(GRAPH_DIR, new_input)
+                        break
+                    elif os.path.exists(new_input):
+                        json_file = new_input
+                        break
+                    else:
+                        print("[ОШИБКА] Файл не найден!")
                 else:
-                    print("[ОШИБКА] Файл не найден! Остаюсь в текущем графе.")
+                    print("Оставлен текущий граф.")
             
             elif choice == '8':
-                # Сброс состояния графа к начальному
                 if reset_graph_state(graph, json_file, label_manager):
-                    print("\n[ИНФОРМАЦИЯ ПОСЛЕ СБРОСА]")
                     graph.print_ascii_graph()
                 input("\nНажмите Enter для продолжения...")
             

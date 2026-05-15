@@ -2,9 +2,14 @@
 
 import json
 import copy
+import os
 from typing import Dict, List, Tuple, Any
 from datetime import datetime
-import os
+
+# Определение пути для сохранения дебаг-файлов
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEBUG_DIR = os.path.join(BASE_DIR, "debug")
+os.makedirs(DEBUG_DIR, exist_ok=True)
 
 
 class DebugMode:
@@ -328,9 +333,7 @@ class DebugMode:
     
     def _update_recommendation_scores(self, action, recommendation_text, new_scores):
         """Обновление оценок рекомендации в label_manager"""
-        # Находим метки для действия
         labels = self.label_manager.get_labels_for_action(action)
-        
         for label in labels:
             for rec in label.recommendations:
                 if rec['text'] == recommendation_text:
@@ -345,9 +348,7 @@ class DebugMode:
         print("ПОШАГОВОЕ ВЫПОЛНЕНИЕ С ОТЛАДКОЙ")
         print("="*70)
         
-        # Создаем копию графа для отладки
         debug_graph = self.graph
-        
         steps = 0
         max_steps = 100
         
@@ -368,7 +369,6 @@ class DebugMode:
                 break
             
             available_actions = debug_graph.get_available_actions()
-            
             if not available_actions:
                 print("\n[ПРЕДУПРЕЖДЕНИЕ] Нет доступных действий!")
                 break
@@ -403,17 +403,11 @@ class DebugMode:
                 idx = int(choice)
                 if 1 <= idx <= len(available_actions):
                     action, next_state_id = available_actions[idx - 1]
-                    
-                    # Показываем подробную отладочную информацию перед выполнением
                     self._show_action_debug_info([(action, next_state_id)])
-                    
                     print(f"\nВыполнить действие: {action.name}?")
                     confirm = input("   Подтвердить (y/n): ").strip().lower()
-                    
                     if confirm == 'y':
-                        # Получаем топ-3 рекомендации
                         top_recs = self.label_manager.get_top_recommendations_for_action(action, top_n=3)
-                        
                         print(f"\nВыполняется: {action.name}...")
                         success = debug_graph.execute_action(action.id, recommendations=top_recs)
                         if success:
@@ -437,23 +431,16 @@ class DebugMode:
         for action, _ in actions:
             print(f"\n[ОТЛАДКА] Действие: {action.name}")
             print(f"   Описание: {action.description}")
-            
-            # Показываем метки
             labels = self.label_manager.get_labels_for_action(action)
             if labels:
                 print(f"   Метки: {', '.join([l.name for l in labels])}")
-            
-            # Показываем веса критериев (без np.float64)
             print(f"\n   Веса критериев:")
             for crit, w in weights_float.items():
                 print(f"      {crit}: {w:.4f}")
-            
-            # Показываем рекомендации с расчетом оценок
             recommendations = self.label_manager.get_recommendations_for_action(action)
             if recommendations:
                 print(f"\n   Рекомендации с расчетом оценок (МАИ):")
                 ranked = self.label_manager.ranker.rank_recommendations(recommendations)
-                
                 for rec, score in ranked:
                     print(f"\n      Рекомендация: {rec['text']}")
                     print(f"      Итоговая оценка: {float(score):.4f}")
@@ -471,15 +458,12 @@ class DebugMode:
         print("\n" + "="*60)
         print("ИСТОРИЯ ИЗМЕНЕНИЙ")
         print("="*60)
-        
         if not self.changes_log:
             print("Изменений не было.")
             return
-        
         for i, change in enumerate(self.changes_log, 1):
             print(f"\n{i}. {change['timestamp']}")
             print(f"   Тип: {change['type']}")
-            
             if change['type'] == 'criteria_weights':
                 print("   Изменение весов критериев:")
                 print("      Было:")
@@ -489,7 +473,6 @@ class DebugMode:
                 for k, v in change['new_values'].items():
                     diff = v - change['old_values'].get(k, 0)
                     print(f"         {k}: {v:.4f} ({diff:+.4f})")
-            
             elif change['type'] == 'recommendation_scores':
                 print(f"   Действие: {change['action']}")
                 print(f"   Рекомендация: {change['recommendation']}")
@@ -502,57 +485,17 @@ class DebugMode:
                     diff = v - old_v
                     print(f"         {k}: {v:.2f} ({diff:+.2f})")
     
-    def _save_changes_to_file(self):
-        """Сохранить изменения в новый файл"""
-        print("\n" + "="*60)
-        print("СОХРАНЕНИЕ ИЗМЕНЕНИЙ")
-        print("="*60)
-        
-        # Создаем имя файла
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Сохраняем измененные веса критериев
-        weights_file = f"ahp_criteria_config_debug_{timestamp}.json"
-        self._save_criteria_weights_to_file(weights_file)
-        
-        # Сохраняем измененные оценки рекомендаций
-        labels_file = f"labels_config_debug_{timestamp}.json"
-        self._save_labels_to_file(labels_file)
-        
-        # Сохраняем лог изменений
-        log_file = f"debug_changes_{timestamp}.json"
-        
-        # Преобразуем веса для сохранения
-        weights = self.label_manager.ranker.criteria_ahp.weights
-        weights_float = {k: float(v) for k, v in weights.items()}
-        
-        with open(log_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                'session_id': self.debug_session_id,
-                'timestamp': timestamp,
-                'changes': self.changes_log,
-                'final_weights': weights_float
-            }, f, indent=2, ensure_ascii=False)
-        
-        print(f"\n[УСПЕХ] Файлы сохранены:")
-        print(f"   - {weights_file}")
-        print(f"   - {labels_file}")
-        print(f"   - {log_file}")
-    
     def _save_criteria_weights_to_file(self, filename):
-        """Сохранить веса критериев в файл, идентичный исходному формату"""
+        """Сохранить веса критериев в файл внутри папки debug"""
         weights = self.label_manager.ranker.criteria_ahp.weights
         criteria_names = list(weights.keys())
         
-        # Восстанавливаем парные сравнения как отношения весов:
-        # a_ij = w_i / w_j, округлённое до шкалы 1..9 или обратных значений
         pairwise = {}
         for i, name_i in enumerate(criteria_names):
             for j, name_j in enumerate(criteria_names):
                 if i >= j:
                     continue
                 ratio = weights[name_i] / weights[name_j]
-                # Приводим к шкале Саати (1..9)
                 if ratio >= 1:
                     value = min(9, round(ratio))
                 else:
@@ -566,11 +509,12 @@ class DebugMode:
             "note": "Generated from debug mode. Use 'calculated_weights' for direct loading."
         }
         
-        with open(filename, 'w', encoding='utf-8') as f:
+        full_path = os.path.join(DEBUG_DIR, filename)
+        with open(full_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     
     def _save_labels_to_file(self, filename):
-        """Сохранить изменённые метки и рекомендации в файл, идентичный исходному"""
+        """Сохранить изменённые метки и рекомендации в папку debug"""
         labels_data = []
         for label in self.label_manager.labels:
             rec_list = []
@@ -590,29 +534,54 @@ class DebugMode:
             "note": "Generated from debug mode"
         }
         
-        with open(filename, 'w', encoding='utf-8') as f:
+        full_path = os.path.join(DEBUG_DIR, filename)
+        with open(full_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    def _save_changes_to_file(self):
+        """Сохранить изменения в новые файлы внутри папки debug"""
+        print("\n" + "="*60)
+        print("СОХРАНЕНИЕ ИЗМЕНЕНИЙ")
+        print("="*60)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        weights_file = f"ahp_criteria_config_debug_{timestamp}.json"
+        self._save_criteria_weights_to_file(weights_file)
+        
+        labels_file = f"labels_config_debug_{timestamp}.json"
+        self._save_labels_to_file(labels_file)
+        
+        log_file = f"debug_changes_{timestamp}.json"
+        weights_float = {k: float(v) for k, v in self.label_manager.ranker.criteria_ahp.weights.items()}
+        full_log_path = os.path.join(DEBUG_DIR, log_file)
+        with open(full_log_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'session_id': self.debug_session_id,
+                'timestamp': timestamp,
+                'changes': self.changes_log,
+                'final_weights': weights_float
+            }, f, indent=2, ensure_ascii=False)
+        
+        print(f"\n[УСПЕХ] Файлы сохранены в папку '{DEBUG_DIR}':")
+        print(f"   - {weights_file}")
+        print(f"   - {labels_file}")
+        print(f"   - {log_file}")
     
     def _reset_to_original(self):
         """Сбросить к оригинальным настройкам"""
         print("\nСбросить все изменения к оригинальным настройкам? (y/n): ")
         confirm = input().strip().lower()
-        
         if confirm == 'y':
-            # Восстанавливаем веса критериев
             self.label_manager.ranker.criteria_ahp.weights = copy.deepcopy(self.original_weights)
-            
-            # Восстанавливаем оценки рекомендаций
             for action_id, action in self.graph.actions.items():
                 if action_id in self.original_scores:
-                    # Обновляем рекомендации для действия
                     labels = self.label_manager.get_labels_for_action(action)
                     for label in labels:
                         for rec in label.recommendations:
                             for orig_rec in self.original_scores[action_id]:
                                 if rec['text'] == orig_rec['text']:
                                     rec['scores'] = copy.deepcopy(orig_rec['scores'])
-            
             self.changes_log = []
             print("\n[УСПЕХ] Настройки сброшены к оригинальным!")
         else:
